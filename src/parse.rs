@@ -107,7 +107,7 @@ impl<'data> X86ByteStream<'data> {
         let mod_part = byte >> 6;
         let reg_part = (byte >> 3) & 0x7;
         let r_m_part = byte & 0x7;
-        
+
         Ok((mod_part, reg_part, r_m_part))
     }
 
@@ -123,8 +123,9 @@ impl<'data> X86ByteStream<'data> {
                         register: SegmentRegister::Ds,
                         address: self.read_u16()?,
                     }),
-                    _ => Ok(Operand::RegistersAddressByteNoOffset {
-                        registers: AddressRegisters::from_byte(rm)
+                    _ => Ok(Operand::RegistersAddressByte {
+                        registers: AddressRegisters::from_byte(rm),
+                        offset: 0,
                     })
                 }
             }
@@ -144,15 +145,34 @@ impl<'data> X86ByteStream<'data> {
                         register: SegmentRegister::Ds,
                         address: self.read_u16()?,
                     }),
-                    _ => Ok(Operand::RegistersAddressWordNoOffset {
-                        registers: AddressRegisters::from_byte(rm)
+                    _ => Ok(Operand::RegistersAddressWord {
+                        registers: AddressRegisters::from_byte(rm),
+                        offset: 0,
                     })
                 }
             }
             Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
         }
     }
-    
+
+    fn read_mod1_operand_16bit_result(
+        &mut self,
+        rm: u8,
+        address_bits: Bits
+    ) -> Result<Operand, ParseError> {
+        let offset = self.read_i8()?;
+
+        match address_bits {
+            Bits::Bit16 => {
+                Ok(Operand::RegistersAddressWord {
+                    registers: AddressRegisters::from_byte(rm),
+                    offset: offset as i16,
+                })
+            }
+            Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
+        }
+    }
+
     fn read_special_op_operand_8bit_result(
         &mut self,
         modrm: (u8, u8, u8),
@@ -185,7 +205,7 @@ impl<'data> X86ByteStream<'data> {
             3 => {
                 let first_reg = SegmentRegister::from_byte(modrm.1)?;
                 let second_reg = Register::from_byte(modrm.2, Bits::Bit16);
-                
+
                 Ok((
                     Operand::SegmentRegister { register: first_reg },
                     Operand::Register { register: second_reg },
@@ -194,7 +214,7 @@ impl<'data> X86ByteStream<'data> {
             _ => Err(ParseError::UnimplementedMod(modrm.0))
         }
     }
-    
+
     fn read_regpair_general(
         &mut self,
         operand_bits: Bits,
@@ -208,6 +228,19 @@ impl<'data> X86ByteStream<'data> {
                 match address_bits {
                     Bits::Bit16 => {
                         let second_mem = self.read_mod0_operand_16bit_result(modrm.2, address_bits)?;
+
+                        Ok((
+                            Operand::Register { register: first_reg },
+                            second_mem,
+                        ))
+                    }
+                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                }
+            }
+            1 => {
+                match address_bits {
+                    Bits::Bit16 => {
+                        let second_mem = self.read_mod1_operand_16bit_result(modrm.2, address_bits)?;
 
                         Ok((
                             Operand::Register { register: first_reg },
@@ -282,14 +315,45 @@ pub fn parse_data<'data>(
                     }])
                 }
                 0x33 => {
-                    let operands = stream.read_regpair_general(operand_bits, address_bits)?;
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits
+                    )?;
+
                     (OpCode::Xor, vec![operands.0, operands.1])
+                }
+                0x3C => {
+                    let compared = stream.read_u8()?;
+
+                    (OpCode::Cmp, vec![
+                        Operand::SmallRegister {
+                            register: SmallRegister::Al
+                        },
+                        Operand::Constant8 {
+                            value: compared
+                        }
+                    ])
                 }
                 0x50..=0x57 => {
                     let register = Register::from_byte(opcode - 0x50, operand_bits);
                     let register = Operand::Register { register };
 
                     (OpCode::Push, vec![register])
+                }
+                0x58..=0x5F => {
+                    let register = Register::from_byte(opcode - 0x58, operand_bits);
+                    let register = Operand::Register { register };
+
+                    (OpCode::Pop, vec![register])
+                }
+                0x73 => {
+                    let offset = stream.read_i8()?;
+
+                    jump_targets.push(stream.pos as isize + offset as isize);
+
+                    (OpCode::Jae, vec![Operand::RelativeOffset8 {
+                        offset
+                    }])
                 }
                 0x74 => {
                     let offset = stream.read_i8()?;
@@ -383,6 +447,9 @@ pub fn parse_data<'data>(
                         Bits::Bit16 => (OpCode::MovSw, vec![]),
                         Bits::Bit32 => (OpCode::MovSd, vec![]),
                     }
+                }
+                0xAC => {
+                    (OpCode::LodSb, vec![])
                 }
                 0xB0..=0xB7 => {
                     let register = SmallRegister::from_byte(opcode - 0xB0);
@@ -504,7 +571,7 @@ pub fn parse_data<'data>(
                 }
                 _ => return Err(ParseError::UnimplementedOp(opcode)),
             };
-            
+
             Ok(Op {
                 raw_data: &stream.bytes[data_start..stream.pos],
                 prefixes,

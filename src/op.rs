@@ -36,7 +36,7 @@ impl<'data> fmt::Display for Op<'data> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut raw_data = String::with_capacity(16);
         for (i, byte) in self.raw_data.iter().enumerate() {
-            raw_data.push_str(&format!("{:#04x}", byte));
+            raw_data.push_str(&format!("{:02x}", byte));
             if i != self.raw_data.len() - 1 {
                 raw_data.push_str(" ");
             }
@@ -54,7 +54,7 @@ impl<'data> fmt::Display for Op<'data> {
         write!(f, "{}", prefixes)?;
 
         write!(f, "{}", self.opcode)?;
-        
+
         if !self.operands.is_empty() {
             write!(f, " ")?;
         }
@@ -122,9 +122,11 @@ pub enum OpCode {
     Dec,
     Inc,
     Int,
+    Jae,
     Jnz,
     Jump,
     Jz,
+    LodSb,
     Mov,
     MovSb,
     MovSd,
@@ -152,9 +154,11 @@ impl fmt::Display for OpCode {
             OpCode::Dec => "DEC",
             OpCode::Inc => "INC",
             OpCode::Int => "INT",
+            OpCode::Jae => "JAE",
             OpCode::Jnz => "JNZ",
             OpCode::Jump => "JUMP",
             OpCode::Jz => "JZ",
+            OpCode::LodSb => "LODSB",
             OpCode::Mov => "MOV",
             OpCode::MovSb => "MOVSB",
             OpCode::MovSd => "MOVSD",
@@ -182,6 +186,7 @@ pub enum AddressRegisters {
     BpDi,
     Si,
     Di,
+    Bp,
     Bx,
 }
 
@@ -194,6 +199,7 @@ impl fmt::Display for AddressRegisters {
             AddressRegisters::BpDi => "bp+di",
             AddressRegisters::Si => "si",
             AddressRegisters::Di => "di",
+            AddressRegisters::Bp => "bp",
             AddressRegisters::Bx => "bx",
         };
 
@@ -210,6 +216,7 @@ impl AddressRegisters {
             3 => AddressRegisters::BpDi,
             4 => AddressRegisters::Si,
             5 => AddressRegisters::Di,
+            6 => AddressRegisters::Bp,
             7 => AddressRegisters::Bx,
             _ => unreachable!(),
         }
@@ -405,11 +412,13 @@ pub enum Operand {
     Register {
         register: Register
     },
-    RegistersAddressByteNoOffset {
+    RegistersAddressByte {
         registers: AddressRegisters,
+        offset: i16,
     },
-    RegistersAddressWordNoOffset {
+    RegistersAddressWord {
         registers: AddressRegisters,
+        offset: i16,
     },
     SegmentRegister {
         register: SegmentRegister
@@ -447,11 +456,35 @@ impl fmt::Display for Operand {
             Operand::Constant16 { value } => &format!("{:#06x}", value),
             Operand::Constant32 { value } => &format!("{:#10x}", value),
             Operand::Register { register } => &format!("{}", register),
-            Operand::RegistersAddressByteNoOffset { registers } => {
-                &format!("byte [{}]", registers)
+            Operand::RegistersAddressByte { registers, offset } => {
+                if *offset == 0 {
+                    &format!("byte [{}]", registers)
+                } else if *offset < 0 && *offset >= -0xFF {
+                    &format!("byte [{}-{:#04x}]", registers, -offset)
+                } else if *offset > 0 && *offset <= 0xFF {
+                    &format!("byte [{}-{:#04x}]", registers, offset)
+                } else if *offset < 0 {
+                    &format!("byte [{}-{:#06x}]", registers, -offset)
+                } else if *offset > 0 {
+                    &format!("byte [{}-{:#06x}]", registers, offset)
+                } else {
+                    unreachable!()
+                }
             }
-            Operand::RegistersAddressWordNoOffset { registers } => {
-                &format!("word [{}]", registers)
+            Operand::RegistersAddressWord { registers, offset } => {
+                if *offset == 0 {
+                    &format!("word [{}]", registers)
+                } else if *offset < 0 && *offset >= -0xFF {
+                    &format!("word [{}-{:#04x}]", registers, -offset)
+                } else if *offset > 0 && *offset <= 0xFF {
+                    &format!("word [{}+{:#04x}]", registers, offset)
+                } else if *offset < 0 {
+                    &format!("word [{}-{:#06x}]", registers, -offset)
+                } else if *offset > 0 {
+                    &format!("word [{}+{:#06x}]", registers, offset)
+                } else {
+                    unreachable!()
+                }
             }
             Operand::SegmentRegister { register } => &format!("{}", register),
             Operand::SmallRegister { register } => &format!("{}", register),
