@@ -234,7 +234,7 @@ impl<'data> X86ByteStream<'data> {
 pub fn parse_data<'data>(
     input: &'data [u8],
     bits: Bits
-) -> (Vec<Result<Op<'data>, ParseError>>, Vec<usize>) {
+) -> (Vec<Result<Op<'data>, ParseError>>, Vec<isize>) {
     let mut stream = X86ByteStream::new(input);
 
     let mut resulting_ops = Vec::new();
@@ -294,12 +294,16 @@ pub fn parse_data<'data>(
                 0x74 => {
                     let offset = stream.read_i8()?;
 
+                    jump_targets.push(stream.pos as isize + offset as isize);
+
                     (OpCode::Jz, vec![Operand::RelativeOffset8 {
                         offset
                     }])
                 }
                 0x75 => {
                     let offset = stream.read_i8()?;
+
+                    jump_targets.push(stream.pos as isize + offset as isize);
 
                     (OpCode::Jnz, vec![Operand::RelativeOffset8 {
                         offset
@@ -451,12 +455,16 @@ pub fn parse_data<'data>(
                         Bits::Bit16 => {
                             let offset = stream.read_i16()?;
 
+                            jump_targets.push(stream.pos as isize + offset as isize);
+
                             (OpCode::Jump, vec![Operand::RelativeOffset16 {
                                 offset
                             }])
                         }
                         Bits::Bit32 => {
                             let offset = stream.read_i32()?;
+
+                            jump_targets.push(stream.pos as isize + offset as isize);
 
                             (OpCode::Jump, vec![Operand::RelativeOffset32 {
                                 offset
@@ -466,6 +474,8 @@ pub fn parse_data<'data>(
                 }
                 0xEB => {
                     let offset = stream.read_i8()?;
+
+                    jump_targets.push(stream.pos as isize + offset as isize);
 
                     (OpCode::Jump, vec![Operand::RelativeOffset8 {
                         offset

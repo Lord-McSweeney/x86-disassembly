@@ -17,11 +17,14 @@ fn main() {
         std::process::exit(1);
     };
 
-    let (ops, _jump_targets) = parse::parse_data(&file_data, op::Bits::Bit16);
+    let (ops, jump_targets) = parse::parse_data(&file_data, op::Bits::Bit16);
 
     let mut current_offset = 0;
     for op in ops {
-        print!("{:#04}: ", current_offset);
+        if jump_targets.iter().any(|t| *t >= 0 && (*t as usize) == current_offset) {
+            println!("\n                                      addr_{:#04}:", current_offset);
+        }
+        print!("{:#04x}: ", current_offset);
         match op {
             Ok(op) => {
                 current_offset += op.raw_data.len();
