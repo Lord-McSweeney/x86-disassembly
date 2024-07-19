@@ -432,6 +432,7 @@ pub fn parse_data<'data>(
             let mut ad_size_applied = false;
             loop {
                 match opcode {
+                    0x26 => prefixes.push(OpPrefix::Es),
                     0x2E => prefixes.push(OpPrefix::Cs),
                     0x66 => {
                         op_size_applied = true;
@@ -472,6 +473,18 @@ pub fn parse_data<'data>(
                     )?;
 
                     (OpCode::Add, vec![operands.0, operands.1])
+                }
+                0x05 => {
+                    let ax_reg = Operand::Register {
+                        register: Register::from_byte(0, operand_bits)
+                    };
+
+                    let second_operand = stream.read_16_or_32bit_constant(operand_bits)?;
+
+                    (OpCode::Add, vec![
+                        ax_reg,
+                        second_operand,
+                    ])
                 }
                 0x06 => {
                     (OpCode::Push, vec![Operand::SegmentRegister {
@@ -1009,6 +1022,44 @@ pub fn parse_data<'data>(
 
                     (OpCode::Mov, vec![ax_reg, mem_offset_operand])
                 }
+                0xA2 => {
+                    let al_reg = Operand::SmallRegister {
+                        register: SmallRegister::Al
+                    };
+
+                    let mem_offset_operand = match address_bits {
+                        Bits::Bit16 => {
+                            let address = stream.read_u16()?;
+
+                            Operand::AbsoluteRegisterSegmentedByteAddress16 {
+                                register: SegmentRegister::Ds,
+                                address,
+                            }
+                        }
+                        Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    };
+
+                    (OpCode::Mov, vec![mem_offset_operand, al_reg])
+                }
+                0xA3 => {
+                    let ax_reg = Operand::Register {
+                        register: Register::from_byte(0, operand_bits)
+                    };
+
+                    let mem_offset_operand = match address_bits {
+                        Bits::Bit16 => {
+                            let address = stream.read_u16()?;
+
+                            Operand::AbsoluteRegisterSegmentedByteAddress16 {
+                                register: SegmentRegister::Ds,
+                                address,
+                            }
+                        }
+                        Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    };
+
+                    (OpCode::Mov, vec![mem_offset_operand, ax_reg])
+                }
                 0xA4 => {
                     (OpCode::MovSb, vec![])
                 }
@@ -1018,11 +1069,17 @@ pub fn parse_data<'data>(
                         Bits::Bit32 => (OpCode::MovSd, vec![]),
                     }
                 }
+                0xA6 => {
+                    (OpCode::CmpSb, vec![])
+                }
                 0xAC => {
                     (OpCode::LodSb, vec![])
                 }
                 0xAD => {
                     (OpCode::LodSw, vec![])
+                }
+                0xAE => {
+                    (OpCode::ScaSb, vec![])
                 }
                 0xB0..=0xB7 => {
                     let register = SmallRegister::from_byte(opcode - 0xB0);
