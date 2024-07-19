@@ -33,7 +33,7 @@ fn main() {
     println!("                                                       start:");
     for op in ops {
         if jump_targets.iter().any(|t| *t >= 0 && (*t as usize) == current_offset) {
-            println!("\n                                                       addr_{:#04}:", current_offset);
+            println!("\n                                                       addr_{:04x}:", current_offset);
         }
         print!("{:04x}: ", current_offset);
         match op {

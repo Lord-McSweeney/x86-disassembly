@@ -1,16 +1,21 @@
 pub struct Options {
+    pub skips_first_jump: bool,
     pub stop_after: Option<usize>,
 }
 
 pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
-    let mut default_options = Options {
+    let mut options = Options {
+        skips_first_jump: false,
         stop_after: None,
     };
-    println!("{:?}", args);
+
     let mut i = 0;
     while i < args.len() {
         let arg = &args[i];
         match arg.as_str() {
+            "--skip-first-jump" => {
+                options.skips_first_jump = true;
+            }
             "--stop-after" => {
                 let param = args.get(i + 1);
                 i += 1;
@@ -22,7 +27,7 @@ pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
                         param.parse().ok()
                     };
 
-                    default_options.stop_after = stop_after;
+                    options.stop_after = stop_after;
                 } else {
                     return Err("missing parameter for flag --stop-after".to_string());
                 }
@@ -33,5 +38,5 @@ pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
         i += 1;
     }
 
-    Ok(default_options)
+    Ok(options)
 }

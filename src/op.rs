@@ -8,6 +8,7 @@ pub enum ParseError {
     UnimplementedMod(u8),
     UnimplementedOp(u8),
     UnimplementedReg(u8),
+    UnimplementedTwoByteOp(u8),
     Unimplemented32Bit,
 }
 
@@ -20,6 +21,7 @@ impl fmt::Display for ParseError {
             ParseError::UnimplementedMod(mod_part) => write!(f, "unimplemented ModR/M mod {}", mod_part),
             ParseError::UnimplementedOp(opcode) => write!(f, "unimplemented opcode {:#04x}", opcode),
             ParseError::UnimplementedReg(reg_part) => write!(f, "unimplemented ModR/M reg {}", reg_part),
+            ParseError::UnimplementedTwoByteOp(opcode) => write!(f, "unimplemented twobyte opcode {:#04x}", opcode),
             ParseError::Unimplemented32Bit => write!(f, "unimplemented 32-bit operation"),
         }
     }
@@ -135,10 +137,13 @@ pub enum OpCode {
     Adc,
     Add,
     And,
+    Call,
+    Cbw,
     Cld,
     Cli,
     Cmp,
     Dec,
+    Div,
     Imul,
     Inc,
     InSb,
@@ -146,9 +151,10 @@ pub enum OpCode {
     Jae,
     Jb,
     Jbe,
+    Jge,
     Jl,
     Jnz,
-    Jump,
+    Jmp,
     Jz,
     LodSb,
     Loop,
@@ -156,14 +162,24 @@ pub enum OpCode {
     MovSb,
     MovSd,
     MovSw,
+    Mul,
     Nop,
     Or,
     OutSb,
     OutSw,
     Pop,
+    PopA,
     Push,
+    PushA,
+    Rcl,
+    Rcr,
     RetF,
+    Rol,
+    Ror,
+    Sar,
     Sbb,
+    Shl,
+    Shr,
     Sti,
     Sub,
     Test,
@@ -171,6 +187,7 @@ pub enum OpCode {
     Xor,
 
     SpecialData,
+    SpecialNotOp,
 }
 
 impl fmt::Display for OpCode {
@@ -179,10 +196,13 @@ impl fmt::Display for OpCode {
             OpCode::Adc => "ADC",
             OpCode::Add => "ADD",
             OpCode::And => "AND",
+            OpCode::Call => "CALL",
+            OpCode::Cbw => "CBW",
             OpCode::Cld => "CLD",
             OpCode::Cli => "CLI",
             OpCode::Cmp => "CMP",
             OpCode::Dec => "DEC",
+            OpCode::Div => "DIV",
             OpCode::Imul => "IMUL",
             OpCode::Inc => "INC",
             OpCode::InSb => "INSB",
@@ -190,9 +210,10 @@ impl fmt::Display for OpCode {
             OpCode::Jae => "JAE",
             OpCode::Jb => "JB",
             OpCode::Jbe => "JBE",
+            OpCode::Jge => "JGE",
             OpCode::Jl => "JL",
             OpCode::Jnz => "JNZ",
-            OpCode::Jump => "JUMP",
+            OpCode::Jmp => "JMP",
             OpCode::Jz => "JZ",
             OpCode::LodSb => "LODSB",
             OpCode::Loop => "LOOP",
@@ -200,14 +221,24 @@ impl fmt::Display for OpCode {
             OpCode::MovSb => "MOVSB",
             OpCode::MovSd => "MOVSD",
             OpCode::MovSw => "MOVSW",
+            OpCode::Mul => "MUL",
             OpCode::Nop => "NOP",
             OpCode::Or => "OR",
             OpCode::OutSb => "OUTSB",
             OpCode::OutSw => "OUTSW",
             OpCode::Pop => "POP",
+            OpCode::PopA => "POPA",
             OpCode::Push => "PUSH",
+            OpCode::PushA => "PUSHA",
+            OpCode::Rcl => "RCL",
+            OpCode::Rcr => "RCR",
             OpCode::RetF => "RETF",
+            OpCode::Rol => "ROL",
+            OpCode::Ror => "ROR",
+            OpCode::Sar => "SAR",
             OpCode::Sbb => "SBB",
+            OpCode::Shl => "SHL",
+            OpCode::Shr => "SHR",
             OpCode::Sti => "STI",
             OpCode::Sub => "SUB",
             OpCode::Test => "TEST",
@@ -215,6 +246,7 @@ impl fmt::Display for OpCode {
             OpCode::Xor => "XOR",
 
             OpCode::SpecialData => " ;",
+            OpCode::SpecialNotOp => unreachable!(),
         };
 
         write!(f, "{}", string)
@@ -332,6 +364,9 @@ impl Register {
             Bits::Bit32 => {
                 match byte {
                     0 => Register::EAx,
+                    1 => Register::ECx,
+                    2 => Register::EDx,
+                    3 => Register::EBx,
                     _ => todo!(),
                 }
             }
@@ -439,9 +474,10 @@ pub enum Operand {
         register: SegmentRegister,
         address: u16,
     },
-    AbsoluteRegisterSegmentedWordAddress16 {
+    AbsoluteRegisterSegmentedWordOrDwordAddress16 {
         register: SegmentRegister,
         address: u16,
+        bits: Bits,
     },
     Constant8 {
         value: u8,
@@ -459,9 +495,10 @@ pub enum Operand {
         registers: AddressRegisters,
         offset: i16,
     },
-    RegistersAddressWord {
+    RegistersAddressWordOrDword {
         registers: AddressRegisters,
         offset: i16,
+        bits: Bits,
     },
     SegmentRegister {
         register: SegmentRegister
@@ -492,8 +529,13 @@ impl fmt::Display for Operand {
             Operand::AbsoluteRegisterSegmentedByteAddress16 { register, address } => {
                 &format!("byte [{}:{:#06x}]", register, address)
             }
-            Operand::AbsoluteRegisterSegmentedWordAddress16 { register, address } => {
-                &format!("word [{}:{:#06x}]", register, address)
+            Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 { register, address, bits } => {
+                let annotation = match bits {
+                    Bits::Bit16 => "word",
+                    Bits::Bit32 => "dword",
+                };
+
+                &format!("{} [{}:{:#06x}]", annotation, register, address)
             }
             Operand::Constant8 { value } => &format!("{:#04x}", value),
             Operand::Constant16 { value } => &format!("{:#06x}", value),
@@ -514,17 +556,22 @@ impl fmt::Display for Operand {
                     unreachable!()
                 }
             }
-            Operand::RegistersAddressWord { registers, offset } => {
+            Operand::RegistersAddressWordOrDword { registers, offset, bits } => {
+                let annotation = match bits {
+                    Bits::Bit16 => "word",
+                    Bits::Bit32 => "dword",
+                };
+
                 if *offset == 0 {
-                    &format!("word [{}]", registers)
+                    &format!("{} [{}]", annotation, registers)
                 } else if *offset < 0 && *offset >= -0xFF {
-                    &format!("word [{}-{:#04x}]", registers, -offset)
+                    &format!("{} [{}-{:#04x}]", annotation, registers, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("word [{}+{:#04x}]", registers, offset)
+                    &format!("{} [{}+{:#04x}]", annotation, registers, offset)
                 } else if *offset < 0 {
-                    &format!("word [{}-{:#06x}]", registers, -offset)
+                    &format!("{} [{}-{:#06x}]", annotation, registers, -offset)
                 } else if *offset > 0 {
-                    &format!("word [{}+{:#06x}]", registers, offset)
+                    &format!("{} [{}+{:#06x}]", annotation, registers, offset)
                 } else {
                     unreachable!()
                 }
