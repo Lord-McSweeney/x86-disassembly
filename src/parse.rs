@@ -101,6 +101,20 @@ impl<'data> X86ByteStream<'data> {
         }
     }
 
+    fn read_16_or_32bit_constant(
+        &mut self,
+        bits: Bits
+    ) -> Result<Operand, ParseError> {
+        Ok(match bits {
+            Bits::Bit16 => Operand::Constant16 {
+                value: self.read_u16()?
+            },
+            Bits::Bit32 => Operand::Constant32 {
+                value: self.read_u32()?
+            }
+        })
+    }
+
     // See https://wiki.osdev.org/X86-64_Instruction_Encoding#16-bit_addressing
     fn read_modrm(&mut self) -> Result<(u8, u8, u8), ParseError> {
         let byte = self.read_u8()?;
@@ -369,6 +383,23 @@ pub fn parse_data<'data>(
     let mut resulting_ops = Vec::new();
     let mut jump_targets = Vec::new();
 
+    let start_pos = opts.start_at;
+
+    while stream.pos < start_pos {
+        let read_bytes = (start_pos - stream.pos).min(16);
+        let raw_data = &stream.bytes[stream.pos..stream.pos + read_bytes];
+        let op = Op {
+            raw_data,
+            prefixes: vec![],
+            opcode: OpCode::SpecialData,
+            operands: vec![],
+        };
+
+        stream.pos += read_bytes;
+
+        resulting_ops.push(Ok(op));
+    }
+
     while stream.pos < stream.bytes.len() {
         let data_start = stream.pos;
 
@@ -401,6 +432,7 @@ pub fn parse_data<'data>(
             let mut ad_size_applied = false;
             loop {
                 match opcode {
+                    0x2E => prefixes.push(OpPrefix::Cs),
                     0x66 => {
                         op_size_applied = true;
                         prefixes.push(OpPrefix::OpSize);
@@ -422,13 +454,29 @@ pub fn parse_data<'data>(
 
             // http://ref.x86asm.net/coder32.html
             let op_info = match opcode {
+                0x00 => {
+                    let modrm = stream.read_modrm()?;
+                    let first_operand = stream.read_special_op_operand_8bit_result(modrm, address_bits)?;
+
+                    let second_operand = SmallRegister::from_byte(modrm.1);
+                    let second_operand = Operand::SmallRegister {
+                        register: second_operand
+                    };
+
+                    (OpCode::Add, vec![first_operand, second_operand])
+                }
                 0x03 => {
                     let operands = stream.read_regpair_general(
                         operand_bits,
                         address_bits
                     )?;
 
-                    (OpCode::Xor, vec![operands.0, operands.1])
+                    (OpCode::Add, vec![operands.0, operands.1])
+                }
+                0x06 => {
+                    (OpCode::Push, vec![Operand::SegmentRegister {
+                        register: SegmentRegister::Es
+                    }])
                 }
                 0x07 => {
                     (OpCode::Pop, vec![Operand::SegmentRegister {
@@ -473,6 +521,14 @@ pub fn parse_data<'data>(
                         }
                         _ => return Err(ParseError::UnimplementedTwoByteOp(second_byte)),
                     }
+                }
+                0x13 => {
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits
+                    )?;
+
+                    (OpCode::Adc, vec![operands.0, operands.1])
                 }
                 0x1E => {
                     (OpCode::Push, vec![Operand::SegmentRegister {
@@ -536,6 +592,17 @@ pub fn parse_data<'data>(
 
                     (OpCode::Xor, vec![operands.1, operands.0])
                 }
+                0x32 => {
+                    let modrm = stream.read_modrm()?;
+                    let first_operand = SmallRegister::from_byte(modrm.1);
+                    let first_operand = Operand::SmallRegister {
+                        register: first_operand
+                    };
+
+                    let second_operand = stream.read_special_op_operand_8bit_result(modrm, address_bits)?;
+
+                    (OpCode::Xor, vec![first_operand, second_operand])
+                }
                 0x33 => {
                     let operands = stream.read_regpair_general(
                         operand_bits,
@@ -554,6 +621,14 @@ pub fn parse_data<'data>(
                     };
 
                     (OpCode::Cmp, vec![first_operand, second_operand])
+                }
+                0x39 => {
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits
+                    )?;
+
+                    (OpCode::Cmp, vec![operands.1, operands.0])
                 }
                 0x3A => {
                     let modrm = stream.read_modrm()?;
@@ -616,18 +691,21 @@ pub fn parse_data<'data>(
                 0x61 => {
                     (OpCode::PopA, vec![])
                 }
+                0x68 => {
+                    let constant = stream.read_16_or_32bit_constant(operand_bits)?;
+
+                    (OpCode::Push, vec![constant])
+                }
                 0x69 => {
                     let operands = stream.read_regpair_general(operand_bits, address_bits)?;
-                    let constant = match operand_bits {
-                        Bits::Bit16 => Operand::Constant16 {
-                            value: stream.read_u16()?
-                        },
-                        Bits::Bit32 => Operand::Constant32 {
-                            value: stream.read_u32()?
-                        }
-                    };
+                    let constant = stream.read_16_or_32bit_constant(operand_bits)?;
 
                     (OpCode::Imul, vec![operands.0, operands.1, constant])
+                }
+                0x6A => {
+                    (OpCode::Push, vec![Operand::Constant8 {
+                        value: stream.read_u8()?
+                    }])
                 }
                 0x6C => {
                     (OpCode::InSb, vec![])
@@ -683,6 +761,15 @@ pub fn parse_data<'data>(
                         offset
                     }])
                 }
+                0x77 => {
+                    let offset = stream.read_i8()?;
+
+                    jump_targets.push(stream.pos as isize + offset as isize);
+
+                    (OpCode::Ja, vec![Operand::RelativeOffset8 {
+                        offset
+                    }])
+                }
                 0x7C => {
                     let offset = stream.read_i8()?;
 
@@ -698,6 +785,15 @@ pub fn parse_data<'data>(
                     jump_targets.push(stream.pos as isize + offset as isize);
 
                     (OpCode::Jge, vec![Operand::RelativeOffset8 {
+                        offset
+                    }])
+                }
+                0x7F => {
+                    let offset = stream.read_i8()?;
+
+                    jump_targets.push(stream.pos as isize + offset as isize);
+
+                    (OpCode::Jg, vec![Operand::RelativeOffset8 {
                         offset
                     }])
                 }
@@ -740,14 +836,7 @@ pub fn parse_data<'data>(
 
                     let first_operand = stream.read_special_op_operand_16_or_32bit_result(modrm, operand_bits, address_bits)?;
 
-                    let second_operand = match operand_bits {
-                        Bits::Bit16 => Operand::Constant16 {
-                            value: stream.read_u16()?
-                        },
-                        Bits::Bit32 => Operand::Constant32 {
-                            value: stream.read_u32()?
-                        }
-                    };
+                    let second_operand = stream.read_16_or_32bit_constant(operand_bits)?;
 
                     (instr, vec![
                         first_operand,
@@ -787,6 +876,35 @@ pub fn parse_data<'data>(
                     };
 
                     (OpCode::Test, vec![first_operand, second_operand])
+                }
+                0x85 => {
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits
+                    )?;
+
+                    (OpCode::Test, vec![operands.1, operands.0])
+                }
+                0x86 => {
+                    let modrm = stream.read_modrm()?;
+                    let first_operand = stream.read_special_op_operand_8bit_result(modrm, address_bits)?;
+
+                    let second_operand = SmallRegister::from_byte(modrm.1);
+                    let second_operand = Operand::SmallRegister {
+                        register: second_operand
+                    };
+
+                    // Order doesn't matter
+                    (OpCode::Xchg, vec![first_operand, second_operand])
+                }
+                0x87 => {
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits
+                    )?;
+
+                    // Order doesn't matter
+                    (OpCode::Xchg, vec![operands.0, operands.1])
                 }
                 0x88 => {
                     let modrm = stream.read_modrm()?;
@@ -838,10 +956,20 @@ pub fn parse_data<'data>(
                         register: Register::from_byte(opcode - 0x90, operand_bits)
                     };
 
+                    // Order doesn't matter
                     (OpCode::Xchg, vec![operand, ax_reg])
                 }
                 0x98 => {
-                    (OpCode::Cbw, vec![])
+                    match operand_bits {
+                        Bits::Bit16 => (OpCode::Cbw, vec![]),
+                        Bits::Bit32 => (OpCode::CwdE, vec![]),
+                    }
+                }
+                0x99 => {
+                    match operand_bits {
+                        Bits::Bit16 => (OpCode::Cwd, vec![]),
+                        Bits::Bit32 => (OpCode::Cdq, vec![]),
+                    }
                 }
                 0xA0 => {
                     let al_reg = Operand::SmallRegister {
@@ -892,6 +1020,9 @@ pub fn parse_data<'data>(
                 }
                 0xAC => {
                     (OpCode::LodSb, vec![])
+                }
+                0xAD => {
+                    (OpCode::LodSw, vec![])
                 }
                 0xB0..=0xB7 => {
                     let register = SmallRegister::from_byte(opcode - 0xB0);
@@ -974,6 +1105,9 @@ pub fn parse_data<'data>(
 
                     (instr, vec![first_operand, second_operand])
                 }
+                0xC3 => {
+                    (OpCode::RetN, vec![])
+                }
                 0xC6 => {
                     let modrm = stream.read_modrm()?;
                     let operand = stream.read_special_op_operand_8bit_result(
@@ -996,14 +1130,7 @@ pub fn parse_data<'data>(
                         address_bits,
                     )?;
 
-                    let second_operand = match operand_bits {
-                        Bits::Bit16 => Operand::Constant16 {
-                            value: stream.read_u16()?
-                        },
-                        Bits::Bit32 => Operand::Constant32 {
-                            value: stream.read_u32()?
-                        }
-                    };
+                    let second_operand = stream.read_16_or_32bit_constant(operand_bits)?;
 
                     (OpCode::Mov, vec![
                         operand,
@@ -1017,6 +1144,57 @@ pub fn parse_data<'data>(
                     (OpCode::Int, vec![Operand::Constant8 {
                         value: stream.read_u8()?
                     }])
+                }
+                0xD1 => {
+                    let modrm = stream.read_modrm()?;
+                    let instr = match modrm.1 {
+                        0 => OpCode::Rol,
+                        1 => OpCode::Ror,
+                        2 => OpCode::Rcl,
+                        3 => OpCode::Rcr,
+                        4 => OpCode::Shl,
+                        5 => OpCode::Shr,
+                        6 => OpCode::Shl,
+                        7 => OpCode::Sar,
+                        _ => unreachable!(),
+                    };
+
+                    let operand = stream.read_special_op_operand_16_or_32bit_result(
+                        modrm,
+                        operand_bits,
+                        address_bits
+                    )?;
+
+                    let constant_1 = Operand::Constant8 {
+                        value: 1
+                    };
+
+                    (instr, vec![operand, constant_1])
+                }
+                0xD2 => {
+                    let modrm = stream.read_modrm()?;
+                    let instr = match modrm.1 {
+                        0 => OpCode::Rol,
+                        1 => OpCode::Ror,
+                        2 => OpCode::Rcl,
+                        3 => OpCode::Rcr,
+                        4 => OpCode::Shl,
+                        5 => OpCode::Shr,
+                        6 => OpCode::Shl,
+                        7 => OpCode::Sar,
+                        _ => unreachable!(),
+                    };
+
+                    let operand = stream.read_special_op_operand_8bit_result(
+                        modrm,
+                        address_bits
+                    )?;
+
+                    let cl_reg = Operand::SmallRegister {
+                        register: SmallRegister::Cl
+                    };
+
+                    (instr, vec![operand, cl_reg])
                 }
                 0xD3 => {
                     let modrm = stream.read_modrm()?;
@@ -1207,6 +1385,9 @@ pub fn parse_data<'data>(
                         _ => return Err(ParseError::UnimplementedReg(modrm.1)),
                     }
                 }
+                0xF9 => {
+                    (OpCode::Stc, vec![])
+                }
                 0xFA => {
                     (OpCode::Cli, vec![])
                 }
@@ -1215,6 +1396,9 @@ pub fn parse_data<'data>(
                 }
                 0xFC => {
                     (OpCode::Cld, vec![])
+                }
+                0xFD => {
+                    (OpCode::Std, vec![])
                 }
                 0xFE => {
                     let modrm = stream.read_modrm()?;
@@ -1239,6 +1423,15 @@ pub fn parse_data<'data>(
                             )?;
 
                             (OpCode::Jmp, vec![operand])
+                        }
+                        6 => {
+                            let operand = stream.read_special_op_operand_16_or_32bit_result(
+                                modrm,
+                                operand_bits,
+                                address_bits,
+                            )?;
+
+                            (OpCode::Push, vec![operand])
                         }
                         _ => return Err(ParseError::UnimplementedReg(modrm.1)),
                     }
