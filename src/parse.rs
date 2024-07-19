@@ -581,6 +581,14 @@ pub fn parse_data<'data>(
 
                     (OpCode::And, vec![ax_reg, second_operand])
                 }
+                0x2B => {
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits
+                    )?;
+
+                    (OpCode::Sub, vec![operands.0, operands.1])
+                }
                 0x2D => {
                     let ax_reg = Operand::Register {
                         register: Register::from_byte(0, operand_bits)
