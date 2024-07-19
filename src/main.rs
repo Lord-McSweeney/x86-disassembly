@@ -1,3 +1,4 @@
+mod arguments;
 mod op;
 mod parse;
 
@@ -17,13 +18,22 @@ fn main() {
         std::process::exit(1);
     };
 
-    let (ops, jump_targets) = parse::parse_data(&file_data, op::Bits::Bit16);
+    let options = match arguments::parse_arguments(&args[2..]) {
+        Ok(options) => options,
+        Err(e) => {
+            eprintln!("Failed to parse options: {}", e);
+
+            std::process::exit(1);
+        }
+    };
+
+    let (ops, jump_targets) = parse::parse_data(&file_data, options, op::Bits::Bit16);
 
     let mut current_offset = 0;
-    println!("                                      start:");
+    println!("                                                       start:");
     for op in ops {
         if jump_targets.iter().any(|t| *t >= 0 && (*t as usize) == current_offset) {
-            println!("\n                                      addr_{:#04}:", current_offset);
+            println!("\n                                                       addr_{:#04}:", current_offset);
         }
         print!("{:04x}: ", current_offset);
         match op {

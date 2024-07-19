@@ -7,6 +7,7 @@ pub enum ParseError {
     OutOfData,
     UnimplementedMod(u8),
     UnimplementedOp(u8),
+    UnimplementedReg(u8),
     Unimplemented32Bit,
 }
 
@@ -16,8 +17,9 @@ impl fmt::Display for ParseError {
             ParseError::InvalidReg(reg) => write!(f, "invalid modr/m reg {}", reg),
             ParseError::InvalidSegmentRegister(num) => write!(f, "invalid segment register #{}", num),
             ParseError::OutOfData => write!(f, "reached end of stream"),
-            ParseError::UnimplementedMod(mod_part) => write!(f, "unimplemented mod {}", mod_part),
+            ParseError::UnimplementedMod(mod_part) => write!(f, "unimplemented ModR/M mod {}", mod_part),
             ParseError::UnimplementedOp(opcode) => write!(f, "unimplemented opcode {:#04x}", opcode),
+            ParseError::UnimplementedReg(reg_part) => write!(f, "unimplemented ModR/M reg {}", reg_part),
             ParseError::Unimplemented32Bit => write!(f, "unimplemented 32-bit operation"),
         }
     }
@@ -42,7 +44,7 @@ impl<'data> fmt::Display for Op<'data> {
             }
         }
 
-        write!(f, "{:36}", raw_data)?;
+        write!(f, "{:53}", raw_data)?;
 
         let mut prefixes = String::with_capacity(8);
         for prefix in &self.prefixes {
@@ -55,19 +57,36 @@ impl<'data> fmt::Display for Op<'data> {
 
         write!(f, "{}", self.opcode)?;
 
-        if !self.operands.is_empty() {
+        if matches!(self.opcode, OpCode::SpecialData) {
             write!(f, " ")?;
-        }
 
-        let mut operands = String::with_capacity(8);
-        for (i, operand) in self.operands.iter().enumerate() {
-            operands.push_str(&format!("{}", operand));
-            if i != self.operands.len() - 1 {
-                operands.push_str(", ");
+            let mut data = String::with_capacity(32);
+            for byte in self.raw_data {
+                let cbyte = *byte as char;
+
+                if cbyte >= '!' && cbyte <= '}' {
+                    data.push(cbyte);
+                } else {
+                    data.push('.');
+                }
             }
-        }
 
-        write!(f, "{}", operands)
+            write!(f, "{}", data)
+        } else {
+            if !self.operands.is_empty() {
+                write!(f, " ")?;
+            }
+
+            let mut operands = String::with_capacity(8);
+            for (i, operand) in self.operands.iter().enumerate() {
+                operands.push_str(&format!("{}", operand));
+                if i != self.operands.len() - 1 {
+                    operands.push_str(", ");
+                }
+            }
+
+            write!(f, "{}", operands)
+        }
     }
 }
 
@@ -120,26 +139,38 @@ pub enum OpCode {
     Cli,
     Cmp,
     Dec,
+    Imul,
     Inc,
+    InSb,
     Int,
     Jae,
+    Jb,
+    Jbe,
+    Jl,
     Jnz,
     Jump,
     Jz,
     LodSb,
+    Loop,
     Mov,
     MovSb,
     MovSd,
     MovSw,
     Nop,
     Or,
+    OutSb,
+    OutSw,
     Pop,
     Push,
     RetF,
     Sbb,
     Sti,
     Sub,
+    Test,
+    Xchg,
     Xor,
+
+    SpecialData,
 }
 
 impl fmt::Display for OpCode {
@@ -152,26 +183,38 @@ impl fmt::Display for OpCode {
             OpCode::Cli => "CLI",
             OpCode::Cmp => "CMP",
             OpCode::Dec => "DEC",
+            OpCode::Imul => "IMUL",
             OpCode::Inc => "INC",
+            OpCode::InSb => "INSB",
             OpCode::Int => "INT",
             OpCode::Jae => "JAE",
+            OpCode::Jb => "JB",
+            OpCode::Jbe => "JBE",
+            OpCode::Jl => "JL",
             OpCode::Jnz => "JNZ",
             OpCode::Jump => "JUMP",
             OpCode::Jz => "JZ",
             OpCode::LodSb => "LODSB",
+            OpCode::Loop => "LOOP",
             OpCode::Mov => "MOV",
             OpCode::MovSb => "MOVSB",
             OpCode::MovSd => "MOVSD",
             OpCode::MovSw => "MOVSW",
             OpCode::Nop => "NOP",
             OpCode::Or => "OR",
+            OpCode::OutSb => "OUTSB",
+            OpCode::OutSw => "OUTSW",
             OpCode::Pop => "POP",
             OpCode::Push => "PUSH",
             OpCode::RetF => "RETF",
             OpCode::Sbb => "SBB",
             OpCode::Sti => "STI",
             OpCode::Sub => "SUB",
+            OpCode::Test => "TEST",
+            OpCode::Xchg => "XCHG",
             OpCode::Xor => "XOR",
+
+            OpCode::SpecialData => " ;",
         };
 
         write!(f, "{}", string)
@@ -462,11 +505,11 @@ impl fmt::Display for Operand {
                 } else if *offset < 0 && *offset >= -0xFF {
                     &format!("byte [{}-{:#04x}]", registers, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("byte [{}-{:#04x}]", registers, offset)
+                    &format!("byte [{}+{:#04x}]", registers, offset)
                 } else if *offset < 0 {
                     &format!("byte [{}-{:#06x}]", registers, -offset)
                 } else if *offset > 0 {
-                    &format!("byte [{}-{:#06x}]", registers, offset)
+                    &format!("byte [{}+{:#06x}]", registers, offset)
                 } else {
                     unreachable!()
                 }
