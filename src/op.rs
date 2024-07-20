@@ -407,7 +407,11 @@ impl Register {
                     1 => Register::ECx,
                     2 => Register::EDx,
                     3 => Register::EBx,
-                    _ => todo!(),
+                    4 => Register::ESp,
+                    5 => Register::EBp,
+                    6 => Register::ESi,
+                    7 => Register::EDi,
+                    _ => unreachable!(),
                 }
             }
         }
