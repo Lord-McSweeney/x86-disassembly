@@ -1,7 +1,10 @@
+use crate::op::Bits;
+
 pub struct Options {
     pub start_at: usize,
     pub skips_first_jump: bool,
     pub stop_after: Option<usize>,
+    pub bits: Bits,
 }
 
 pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
@@ -9,12 +12,29 @@ pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
         start_at: 0,
         skips_first_jump: false,
         stop_after: None,
+        bits: Bits::Bit16,
     };
 
     let mut i = 0;
     while i < args.len() {
         let arg = &args[i];
         match arg.as_str() {
+            "--bits" => {
+                let param = args.get(i + 1);
+                i += 1;
+
+                if let Some(param) = param {
+                    let bits = match param.as_str() {
+                        "16" => Bits::Bit16,
+                        "32" => Bits::Bit32,
+                        _ => return Err(format!("invalid bits {}, should be '16' or '32'", param)),
+                    };
+
+                    options.bits = bits;
+                } else {
+                    return Err("missing parameter for flag --bits".to_string());
+                }
+            }
             "--start-at" => {
                 let param = args.get(i + 1);
                 i += 1;

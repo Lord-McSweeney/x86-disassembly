@@ -447,8 +447,8 @@ impl<'data> X86ByteStream<'data> {
 pub fn parse_data<'data>(
     input: &'data [u8],
     opts: Options,
-    bits: Bits,
 ) -> (Vec<Result<Op<'data>, ParseError>>, Vec<isize>) {
+    let bits = opts.bits;
     let mut stream = X86ByteStream::new(input);
 
     let mut resulting_ops = Vec::new();

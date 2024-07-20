@@ -5,7 +5,17 @@ mod parse;
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
     let Some(file) = args.get(1) else {
-        eprintln!("Run as {} [file] [options]", args[0]);
+        eprintln!("Run as {} [file] [options]\n
+Options:
+    --bits [bits]         Disassemble for x86-16 or x86-32, depending on [bits]
+
+    --start-at [offset]   Start decompiling starting at the offset [offset]
+
+    --skip-first-jump     If the first instruction is a forward jump, skip
+                          decompiling the bytes it jumps over
+
+    --stop-after [offset] Don't decompile data at and including the oofset
+                          [offset]. This will not cut off ops.", args[0]);
 
         std::process::exit(1);
     };
@@ -27,7 +37,7 @@ fn main() {
         }
     };
 
-    let (ops, jump_targets) = parse::parse_data(&file_data, options, op::Bits::Bit16);
+    let (ops, jump_targets) = parse::parse_data(&file_data, options);
 
     let mut current_offset = 0;
     println!("                                                       start:");
