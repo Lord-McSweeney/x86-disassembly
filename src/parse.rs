@@ -1,3 +1,59 @@
+/*
+- https://wiki.osdev.org/X86-64_Instruction_Encoding#16-bit_addressing
+In 16bit mode the ModR/M byte is very simple. It includes a
+2bit mod:
+    00 for addressing
+    01 for addressing with 8-bit offset
+    10 for addressing with 16-bit offset
+    11 for registers
+
+3bit reg:
+    Always a register.
+    000 for AX
+    001 for CX
+    010 for DX
+    011 for BX
+    100 for SP
+    101 for BP
+    110 for SI
+    111 for DI
+
+3bit rm
+    If mod is set to 11, this specifies a register.
+        000 for AX
+        001 for CX
+        010 for DX
+        011 for BX
+        100 for SP
+        101 for BP
+        110 for SI
+        111 for DI
+    Otherwise, it specifies a group of addressing registers.
+        000 for BX+SI
+        001 for BX+DI
+        010 for BP+SI
+        011 for BP+DI
+        100 for SI
+        101 for DI
+        110 for BP (SEE BELOW NOTE)
+        111 for BX
+
+    NOTE: When mod is set to 00, rm 110 instead specifies something else:
+        that the op is a memory access from [ADDRESS], where ADDRESS is
+        a 16-bit absolute address (though it's by-default offset by DS)
+        that comes in the two bytes following the ModR/M byte.
+
+
+- https://wiki.osdev.org/X86-64_Instruction_Encoding#32/64-bit_addressing
+    (the 3 bits for R/M is 3 bits in x32 mode, ignore the 4 bits present
+    on the page- it's for using REX prefixes in x64 mode)
+
+In 32bit mode the ModR/M byte is more complicated,
+and an extra SIB (scale, index, base) byte is sometimes present. The osdev
+page covers the SIB byte, but here's another page for a little more detail:
+http://www.c-jump.com/CIS77/CPU/x86/X77_0110_scaled_indexed.htm
+*/
+
 use crate::arguments::Options;
 use crate::op::{
     AddressRegisters,
