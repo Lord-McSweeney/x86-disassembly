@@ -2,6 +2,7 @@ use std::fmt;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ParseError {
+    InvalidLeaMod,
     InvalidReg(u8),
     InvalidSegmentRegister(u8),
     OutOfData,
@@ -15,6 +16,7 @@ pub enum ParseError {
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            ParseError::InvalidLeaMod => write!(f, "invalid modr/m mod 3 in lea instruction"),
             ParseError::InvalidReg(reg) => write!(f, "invalid modr/m reg {}", reg),
             ParseError::InvalidSegmentRegister(num) => write!(f, "invalid segment register #{}", num),
             ParseError::OutOfData => write!(f, "reached end of stream"),
@@ -146,6 +148,7 @@ pub enum OpCode {
     Call,
     Cbw,
     Cdq,
+    Clc,
     Cld,
     Cli,
     Cmp,
@@ -169,6 +172,7 @@ pub enum OpCode {
     Jnz,
     Jmp,
     Jz,
+    Lea,
     LodSb,
     LodSw,
     Loop,
@@ -218,6 +222,7 @@ impl fmt::Display for OpCode {
             OpCode::Call => "CALL",
             OpCode::Cbw => "CBW",
             OpCode::Cdq => "CDQ",
+            OpCode::Clc => "CLC",
             OpCode::Cld => "CLD",
             OpCode::Cli => "CLI",
             OpCode::Cmp => "CMP",
@@ -241,6 +246,7 @@ impl fmt::Display for OpCode {
             OpCode::Jnz => "JNZ",
             OpCode::Jmp => "JMP",
             OpCode::Jz => "JZ",
+            OpCode::Lea => "LEA",
             OpCode::LodSb => "LODSB",
             OpCode::LodSw => "LODSW",
             OpCode::Loop => "LOOP",
