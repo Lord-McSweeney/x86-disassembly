@@ -182,127 +182,91 @@ impl<'data> X86ByteStream<'data> {
         Ok((mod_part, reg_part, r_m_part))
     }
 
-    fn read_mod0_operand_8bit_result(
+    fn read_16bit_mod0_operand_8bit_result(
         &mut self,
-        rm: u8,
-        address_bits: Bits
+        rm: u8
     ) -> Result<Operand, ParseError> {
-        match address_bits {
-            Bits::Bit16 => {
-                match rm {
-                    6 => Ok(Operand::AbsoluteRegisterSegmentedByteAddress16 {
-                        register: SegmentRegister::Ds,
-                        address: self.read_u16()?,
-                    }),
-                    _ => Ok(Operand::RegistersAddressByte {
-                        registers: AddressRegisters::from_byte(rm),
-                        offset: 0,
-                    })
-                }
-            }
-            Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
+        match rm {
+            6 => Ok(Operand::AbsoluteRegisterSegmentedByteAddress16 {
+                register: SegmentRegister::Ds,
+                address: self.read_u16()?,
+            }),
+            _ => Ok(Operand::RegistersAddressByte {
+                registers: AddressRegisters::from_byte(rm),
+                offset: 0,
+            })
         }
     }
 
-    fn read_mod0_operand_16bit_result(
+    fn read_16bit_mod0_operand_16bit_result(
         &mut self,
         rm: u8,
         operand_bits: Bits,
-        address_bits: Bits,
     ) -> Result<Operand, ParseError> {
-        match address_bits {
-            Bits::Bit16 => {
-                match rm {
-                    6 => Ok(Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 {
-                        register: SegmentRegister::Ds,
-                        address: self.read_u16()?,
-                        bits: operand_bits,
-                    }),
-                    _ => Ok(Operand::RegistersAddressWordOrDword {
-                        registers: AddressRegisters::from_byte(rm),
-                        offset: 0,
-                        bits: operand_bits,
-                    })
-                }
-            }
-            Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
+        match rm {
+            6 => Ok(Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 {
+                register: SegmentRegister::Ds,
+                address: self.read_u16()?,
+                bits: operand_bits,
+            }),
+            _ => Ok(Operand::RegistersAddressWordOrDword {
+                registers: AddressRegisters::from_byte(rm),
+                offset: 0,
+                bits: operand_bits,
+            })
         }
     }
 
-    fn read_mod1_operand_8bit_result(
+    fn read_16bit_mod1_operand_8bit_result(
         &mut self,
-        rm: u8,
-        address_bits: Bits
+        rm: u8
     ) -> Result<Operand, ParseError> {
         let offset = self.read_i8()?;
 
-        match address_bits {
-            Bits::Bit16 => {
-                Ok(Operand::RegistersAddressByte {
-                    registers: AddressRegisters::from_byte(rm),
-                    offset: offset as i16,
-                })
-            }
-            Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
-        }
+        Ok(Operand::RegistersAddressByte {
+            registers: AddressRegisters::from_byte(rm),
+            offset: offset as i16,
+        })
     }
 
-    fn read_mod1_operand_16bit_result(
+    fn read_16bit_mod1_operand_16bit_result(
         &mut self,
         rm: u8,
         operand_bits: Bits,
-        address_bits: Bits,
     ) -> Result<Operand, ParseError> {
         let offset = self.read_i8()?;
 
-        match address_bits {
-            Bits::Bit16 => {
-                Ok(Operand::RegistersAddressWordOrDword {
-                    registers: AddressRegisters::from_byte(rm),
-                    offset: offset as i16,
-                    bits: operand_bits,
-                })
-            }
-            Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
-        }
+        Ok(Operand::RegistersAddressWordOrDword {
+            registers: AddressRegisters::from_byte(rm),
+            offset: offset as i16,
+            bits: operand_bits,
+        })
     }
 
-    fn read_mod2_operand_8bit_result(
+    fn read_16bit_mod2_operand_8bit_result(
         &mut self,
-        rm: u8,
-        address_bits: Bits
+        rm: u8
     ) -> Result<Operand, ParseError> {
         let offset = self.read_i16()?;
 
-        match address_bits {
-            Bits::Bit16 => {
-                Ok(Operand::RegistersAddressByte {
-                    registers: AddressRegisters::from_byte(rm),
-                    offset,
-                })
-            }
-            Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
-        }
+        Ok(Operand::RegistersAddressByte {
+            registers: AddressRegisters::from_byte(rm),
+            offset,
+        })
     }
 
-    fn read_mod2_operand_16bit_result(
+    fn read_16bit_mod2_operand_16bit_result(
         &mut self,
         rm: u8,
         operand_bits: Bits,
-        address_bits: Bits,
     ) -> Result<Operand, ParseError> {
         let offset = self.read_i16()?;
 
-        match address_bits {
-            Bits::Bit16 => {
-                Ok(Operand::RegistersAddressWordOrDword {
-                    registers: AddressRegisters::from_byte(rm),
-                    offset,
-                    bits: operand_bits,
-                })
-            }
-            Bits::Bit32 => Err(ParseError::Unimplemented32Bit)
-        }
+        Ok(Operand::RegistersAddressWordOrDword {
+            registers: AddressRegisters::from_byte(rm),
+            offset,
+            bits: operand_bits,
+        })
     }
 
     fn read_special_op_operand_8bit_result(
@@ -314,10 +278,7 @@ impl<'data> X86ByteStream<'data> {
             0 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        self.read_mod0_operand_8bit_result(
-                            modrm.2,
-                            address_bits
-                        )?
+                        self.read_16bit_mod0_operand_8bit_result(modrm.2)?
                     }
                     Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
                 }
@@ -325,10 +286,7 @@ impl<'data> X86ByteStream<'data> {
             1 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        self.read_mod1_operand_8bit_result(
-                            modrm.2,
-                            address_bits
-                        )?
+                        self.read_16bit_mod1_operand_8bit_result(modrm.2)?
                     }
                     Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
                 }
@@ -336,10 +294,7 @@ impl<'data> X86ByteStream<'data> {
             2 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        self.read_mod2_operand_8bit_result(
-                            modrm.2,
-                            address_bits
-                        )?
+                        self.read_16bit_mod2_operand_8bit_result(modrm.2)?
                     }
                     Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
                 }
@@ -361,10 +316,9 @@ impl<'data> X86ByteStream<'data> {
             0 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        self.read_mod0_operand_16bit_result(
+                        self.read_16bit_mod0_operand_16bit_result(
                             modrm.2,
                             operand_bits,
-                            address_bits,
                         )?
                     }
                     Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
@@ -373,10 +327,9 @@ impl<'data> X86ByteStream<'data> {
             1 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        self.read_mod1_operand_16bit_result(
+                        self.read_16bit_mod1_operand_16bit_result(
                             modrm.2,
                             operand_bits,
-                            address_bits,
                         )?
                     }
                     Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
@@ -401,7 +354,12 @@ impl<'data> X86ByteStream<'data> {
                 let first_reg = SegmentRegister::from_byte(modrm.1)?;
                 // The operand bits are always Bits::Bit16 because the segment
                 // registers are only 16 bits wide
-                let second_operand = self.read_mod0_operand_16bit_result(modrm.2, Bits::Bit16, address_bits)?;
+                let second_operand = match address_bits {
+                    Bits::Bit16 => {
+                        self.read_16bit_mod0_operand_16bit_result(modrm.2, Bits::Bit16)?
+                    }
+                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                };
 
                 Ok((
                     Operand::SegmentRegister { register: first_reg },
@@ -434,10 +392,9 @@ impl<'data> X86ByteStream<'data> {
             0 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        let second_mem = self.read_mod0_operand_16bit_result(
+                        let second_mem = self.read_16bit_mod0_operand_16bit_result(
                             modrm.2,
-                            operand_bits,
-                            address_bits
+                            operand_bits
                         )?;
 
                         Ok((
@@ -451,10 +408,9 @@ impl<'data> X86ByteStream<'data> {
             1 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        let second_mem = self.read_mod1_operand_16bit_result(
+                        let second_mem = self.read_16bit_mod1_operand_16bit_result(
                             modrm.2,
-                            operand_bits,
-                            address_bits
+                            operand_bits
                         )?;
 
                         Ok((
@@ -468,10 +424,9 @@ impl<'data> X86ByteStream<'data> {
             2 => {
                 match address_bits {
                     Bits::Bit16 => {
-                        let second_mem = self.read_mod2_operand_16bit_result(
+                        let second_mem = self.read_16bit_mod2_operand_16bit_result(
                             modrm.2,
-                            operand_bits,
-                            address_bits
+                            operand_bits
                         )?;
 
                         Ok((
