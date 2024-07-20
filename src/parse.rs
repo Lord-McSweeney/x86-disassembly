@@ -610,6 +610,15 @@ pub fn parse_data<'data>(
 
                     (OpCode::Or, vec![first_operand, second_operand])
                 }
+                0x09 => {
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits,
+                        false,
+                    )?;
+
+                    (OpCode::Or, vec![operands.1, operands.0])
+                }
                 0x0A => {
                     let modrm = stream.read_modrm()?;
                     let first_operand = SmallRegister::from_byte(modrm.1);
@@ -648,14 +657,20 @@ pub fn parse_data<'data>(
                 0x0F => {
                     let second_byte = stream.read_u8()?;
                     match second_byte {
-                        0x84 => {
+                        0x83..=0x84 => {
+                            let instr = match second_byte {
+                                0x83 => OpCode::Jae,
+                                0x84 => OpCode::Jz,
+                                _ => unreachable!(),
+                            };
+
                             match address_bits {
                                 Bits::Bit16 => {
                                     let offset = stream.read_i16()?;
 
                                     jump_targets.push(stream.pos as isize + offset as isize);
 
-                                    (OpCode::Jz, vec![Operand::RelativeOffset16 {
+                                    (instr, vec![Operand::RelativeOffset16 {
                                         offset
                                     }])
                                 }
@@ -664,11 +679,22 @@ pub fn parse_data<'data>(
 
                                     jump_targets.push(stream.pos as isize + offset as isize);
 
-                                    (OpCode::Jz, vec![Operand::RelativeOffset32 {
+                                    (instr, vec![Operand::RelativeOffset32 {
                                         offset
                                     }])
                                 }
                             }
+                        }
+                        0xB6 => {
+                            let modrm = stream.read_modrm()?;
+
+                            let first_operand = Operand::Register {
+                                register: Register::from_byte(modrm.1, operand_bits),
+                            };
+
+                            let second_operand = stream.read_special_op_operand_8bit_result(modrm, address_bits)?;
+
+                            (OpCode::Movzx, vec![first_operand, second_operand])
                         }
                         _ => return Err(ParseError::UnimplementedTwoByteOp(second_byte)),
                     }
@@ -738,6 +764,17 @@ pub fn parse_data<'data>(
                     let second_operand = stream.read_16_or_32bit_constant(operand_bits)?;
 
                     (OpCode::Sub, vec![ax_reg, second_operand])
+                }
+                0x30 => {
+                    let modrm = stream.read_modrm()?;
+                    let first_operand = stream.read_special_op_operand_8bit_result(modrm, address_bits)?;
+
+                    let second_operand = SmallRegister::from_byte(modrm.1);
+                    let second_operand = Operand::SmallRegister {
+                        register: second_operand
+                    };
+
+                    (OpCode::Xor, vec![first_operand, second_operand])
                 }
                 0x31 => {
                     let operands = stream.read_regpair_general(
