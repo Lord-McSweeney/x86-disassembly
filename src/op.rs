@@ -183,7 +183,9 @@ pub enum OpCode {
     MovSw,
     Movzx,
     Mul,
+    Neg,
     Nop,
+    Not,
     Or,
     OutSb,
     OutSw,
@@ -258,7 +260,9 @@ impl fmt::Display for OpCode {
             OpCode::MovSw => "MOVSW",
             OpCode::Movzx => "MOVZX",
             OpCode::Mul => "MUL",
+            OpCode::Neg => "NEG",
             OpCode::Nop => "NOP",
+            OpCode::Not => "NOT",
             OpCode::Or => "OR",
             OpCode::OutSb => "OUTSB",
             OpCode::OutSw => "OUTSW",
@@ -506,6 +510,9 @@ impl SmallRegister {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Operand {
+    AbsoluteAddress32Byte {
+        address: u32,
+    },
     AbsoluteConstantSegmentedOffset16 {
         segment: u16,
         offset: u16,
@@ -532,6 +539,10 @@ pub enum Operand {
     Constant32 {
         value: u32,
     },
+    GeneralRegisterAddressByte {
+        register: Register,
+        offset: i16,
+    },
     GeneralRegisterAddressWordOrDword {
         register: Register,
         offset: i16,
@@ -549,7 +560,13 @@ pub enum Operand {
         offset: i16,
         bits: Bits,
     },
-    ScaleIndexBaseAddressing {
+    ScaleIndexBaseAddressingByte {
+        scale: u8,
+        index: Register,
+        base: Register,
+        offset: i32,
+    },
+    ScaleIndexBaseAddressingWordOrDword {
         scale: u8,
         index: Register,
         base: Register,
@@ -576,11 +593,14 @@ pub enum Operand {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let string = match self {
+            Operand::AbsoluteAddress32Byte { address } => {
+                &format!("byte [{:#010x}]", address)
+            }
             Operand::AbsoluteConstantSegmentedOffset16 { segment, offset } => {
                 &format!("{:#06x}:{:#06x}", segment, offset)
             }
             Operand::AbsoluteConstantSegmentedOffset32 { segment, offset } => {
-                &format!("{:#06x}:{:#10x}", segment, offset)
+                &format!("{:#06x}:{:#010x}", segment, offset)
             }
             Operand::AbsoluteRegisterSegmentedByteAddress16 { register, address } => {
                 &format!("byte [{}:{:#06x}]", register, address)
@@ -596,6 +616,21 @@ impl fmt::Display for Operand {
             Operand::Constant8 { value } => &format!("{:#04x}", value),
             Operand::Constant16 { value } => &format!("{:#06x}", value),
             Operand::Constant32 { value } => &format!("{:#010x}", value),
+            Operand::GeneralRegisterAddressByte { register, offset } => {
+                if *offset == 0 {
+                    &format!("byte [{}]", register)
+                } else if *offset < 0 && *offset >= -0xFF {
+                    &format!("byte [{}-{:#04x}]", register, -offset)
+                } else if *offset > 0 && *offset <= 0xFF {
+                    &format!("byte [{}+{:#04x}]", register, offset)
+                } else if *offset < 0 {
+                    &format!("byte [{}-{:#06x}]", register, -offset)
+                } else if *offset > 0 {
+                    &format!("byte [{}+{:#06x}]", register, offset)
+                } else {
+                    unreachable!()
+                }
+            }
             Operand::GeneralRegisterAddressWordOrDword { register, offset, bits } => {
                 let annotation = match bits {
                     Bits::Bit16 => "word",
@@ -652,7 +687,48 @@ impl fmt::Display for Operand {
                     unreachable!()
                 }
             }
-            Operand::ScaleIndexBaseAddressing {
+            Operand::ScaleIndexBaseAddressingByte {
+                scale,
+                index,
+                base,
+                offset,
+            } => {
+                let real_scale = match scale {
+                    0 => 1,
+                    1 => 2,
+                    2 => 4,
+                    3 => 8,
+                    _ => unreachable!(),
+                };
+
+                let scale_index_base = if matches!(index, Register::ESp) {
+                    // When the index register is ESP, it is ignored
+                    // (apparently zero), and only the base register
+                    // is taken into account.
+                    &format!("{}", base)
+                } else {
+                    if real_scale == 1 {
+                        &format!("{}+{}", index, base)
+                    } else {
+                        &format!("{}*{}+{}", real_scale, index, base)
+                    }
+                };
+
+                if *offset == 0 {
+                    &format!("byte [{}]", scale_index_base)
+                } else if *offset < 0 && *offset >= -0xFF {
+                    &format!("byte [{}-{:#04x}]", scale_index_base, -offset)
+                } else if *offset > 0 && *offset <= 0xFF {
+                    &format!("byte [{}+{:#04x}]", scale_index_base, offset)
+                } else if *offset < 0 {
+                    &format!("byte [{}-{:#010x}]", scale_index_base, -offset)
+                } else if *offset > 0 {
+                    &format!("byte [{}+{:#010x}]", scale_index_base, offset)
+                } else {
+                    unreachable!()
+                }
+            }
+            Operand::ScaleIndexBaseAddressingWordOrDword {
                 scale,
                 index,
                 base,
@@ -717,9 +793,9 @@ impl fmt::Display for Operand {
             }
             Operand::RelativeOffset32 { offset } => {
                 if *offset > 0 {
-                    &format!("+{:#10x}", offset)
+                    &format!("+{:#010x}", offset)
                 } else {
-                    &format!("-{:#10x}", -offset)
+                    &format!("-{:#010x}", -offset)
                 }
             }
         };

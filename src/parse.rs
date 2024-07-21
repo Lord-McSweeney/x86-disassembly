@@ -273,6 +273,70 @@ impl<'data> X86ByteStream<'data> {
         })
     }
 
+    fn read_32bit_mod0_operand_8bit_result(
+        &mut self,
+        rm: u8,
+    ) -> Result<Operand, ParseError> {
+        match rm {
+            0..=3 | 6..=7 => {
+                // EAX, ECX, EDX, EBX, ESI, or EDI
+                let register = Register::from_byte(rm, Bits::Bit32);
+
+                Ok(Operand::GeneralRegisterAddressByte {
+                    register,
+                    offset: 0,
+                })
+            }
+            4 => {
+                let sib = self.read_sib()?;
+
+                Ok(Operand::ScaleIndexBaseAddressingByte {
+                    scale: sib.0,
+                    index: Register::from_byte(sib.1, Bits::Bit32),
+                    base: Register::from_byte(sib.2, Bits::Bit32),
+                    offset: 0,
+                })
+            }
+            5 => {
+                Ok(Operand::AbsoluteAddress32Byte {
+                    address: self.read_u32()?
+                })
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn read_32bit_mod1_operand_8bit_result(
+        &mut self,
+        rm: u8,
+    ) -> Result<Operand, ParseError> {
+        match rm {
+            0..=3 | 5..=7 => {
+                // EAX, ECX, EDX, EBX, EBP, ESI, or EDI
+                let register = Register::from_byte(rm, Bits::Bit32);
+
+                let offset = self.read_i8()?;
+
+                Ok(Operand::GeneralRegisterAddressByte {
+                    register,
+                    offset: offset as i16,
+                })
+            }
+            4 => {
+                let sib = self.read_sib()?;
+                let offset = self.read_i8()?;
+
+                Ok(Operand::ScaleIndexBaseAddressingByte {
+                    scale: sib.0,
+                    index: Register::from_byte(sib.1, Bits::Bit32),
+                    base: Register::from_byte(sib.2, Bits::Bit32),
+                    offset: offset as i32,
+                })
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn read_32bit_mod1_operand_16bit_result(
         &mut self,
         rm: u8,
@@ -280,7 +344,7 @@ impl<'data> X86ByteStream<'data> {
     ) -> Result<Operand, ParseError> {
         match rm {
             0..=3 | 5..=7 => {
-                // EAX, ECX, EDX, EBX, ESI, or EDI
+                // EAX, ECX, EDX, EBX, EBP, ESI, or EDI
                 let register = Register::from_byte(rm, Bits::Bit32);
 
                 let offset = self.read_i8()?;
@@ -295,7 +359,41 @@ impl<'data> X86ByteStream<'data> {
                 let sib = self.read_sib()?;
                 let offset = self.read_i8()?;
 
-                Ok(Operand::ScaleIndexBaseAddressing {
+                Ok(Operand::ScaleIndexBaseAddressingWordOrDword {
+                    scale: sib.0,
+                    index: Register::from_byte(sib.1, Bits::Bit32),
+                    base: Register::from_byte(sib.2, Bits::Bit32),
+                    offset: offset as i32,
+                    bits: operand_bits,
+                })
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn read_32bit_mod2_operand_16bit_result(
+        &mut self,
+        rm: u8,
+        operand_bits: Bits,
+    ) -> Result<Operand, ParseError> {
+        match rm {
+            0..=3 | 5..=7 => {
+                // EAX, ECX, EDX, EBX, EBP, ESI, or EDI
+                let register = Register::from_byte(rm, Bits::Bit32);
+
+                let offset = self.read_i32()?;
+
+                Ok(Operand::GeneralRegisterAddressWordOrDword {
+                    register,
+                    offset: offset as i16,
+                    bits: operand_bits,
+                })
+            }
+            4 => {
+                let sib = self.read_sib()?;
+                let offset = self.read_i32()?;
+
+                Ok(Operand::ScaleIndexBaseAddressingWordOrDword {
                     scale: sib.0,
                     index: Register::from_byte(sib.1, Bits::Bit32),
                     base: Register::from_byte(sib.2, Bits::Bit32),
@@ -318,7 +416,9 @@ impl<'data> X86ByteStream<'data> {
                     Bits::Bit16 => {
                         self.read_16bit_mod0_operand_8bit_result(modrm.2)?
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        self.read_32bit_mod0_operand_8bit_result(modrm.2)?
+                    }
                 }
             }
             1 => {
@@ -326,7 +426,9 @@ impl<'data> X86ByteStream<'data> {
                     Bits::Bit16 => {
                         self.read_16bit_mod1_operand_8bit_result(modrm.2)?
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        self.read_32bit_mod1_operand_8bit_result(modrm.2)?
+                    }
                 }
             }
             2 => {
@@ -482,7 +584,17 @@ impl<'data> X86ByteStream<'data> {
                             second_mem,
                         ))
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        let second_mem = self.read_32bit_mod2_operand_16bit_result(
+                            modrm.2,
+                            operand_bits
+                        )?;
+
+                        Ok((
+                            Operand::Register { register: first_reg },
+                            second_mem,
+                        ))
+                    }
                 }
             }
             3 => {
@@ -716,10 +828,14 @@ pub fn parse_data<'data>(
                 0x0F => {
                     let second_byte = stream.read_u8()?;
                     match second_byte {
-                        0x83..=0x84 => {
+                        0x83..=0x87 | 0x8C => {
                             let instr = match second_byte {
                                 0x83 => OpCode::Jae,
                                 0x84 => OpCode::Jz,
+                                0x85 => OpCode::Jnz,
+                                0x86 => OpCode::Jbe,
+                                0x87 => OpCode::Ja,
+                                0x8C => OpCode::Jl,
                                 _ => unreachable!(),
                             };
 
@@ -1732,6 +1848,24 @@ pub fn parse_data<'data>(
                 0xF7 => {
                     let modrm = stream.read_modrm()?;
                     match modrm.1 {
+                        2 => {
+                            let operand = stream.read_special_op_operand_16_or_32bit_result(
+                                modrm,
+                                operand_bits,
+                                address_bits,
+                            )?;
+
+                            (OpCode::Not, vec![operand])
+                        }
+                        3 => {
+                            let operand = stream.read_special_op_operand_16_or_32bit_result(
+                                modrm,
+                                operand_bits,
+                                address_bits,
+                            )?;
+
+                            (OpCode::Neg, vec![operand])
+                        }
                         4 => {
                             let operand = stream.read_special_op_operand_16_or_32bit_result(
                                 modrm,
