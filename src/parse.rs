@@ -182,6 +182,10 @@ impl<'data> X86ByteStream<'data> {
         Ok((mod_part, reg_part, r_m_part))
     }
 
+    fn read_sib(&mut self) -> Result<(u8, u8, u8), ParseError> {
+        self.read_modrm()
+    }
+
     fn read_16bit_mod0_operand_8bit_result(
         &mut self,
         rm: u8
@@ -267,6 +271,40 @@ impl<'data> X86ByteStream<'data> {
             offset,
             bits: operand_bits,
         })
+    }
+
+    fn read_32bit_mod1_operand_16bit_result(
+        &mut self,
+        rm: u8,
+        operand_bits: Bits,
+    ) -> Result<Operand, ParseError> {
+        match rm {
+            0..=3 | 5..=7 => {
+                // EAX, ECX, EDX, EBX, ESI, or EDI
+                let register = Register::from_byte(rm, Bits::Bit32);
+
+                let offset = self.read_i8()?;
+
+                Ok(Operand::GeneralRegisterAddressWordOrDword {
+                    register,
+                    offset: offset as i16,
+                    bits: operand_bits,
+                })
+            }
+            4 => {
+                let sib = self.read_sib()?;
+                let offset = self.read_i8()?;
+
+                Ok(Operand::ScaleIndexBaseAddressing {
+                    scale: sib.0,
+                    index: Register::from_byte(sib.1, Bits::Bit32),
+                    base: Register::from_byte(sib.2, Bits::Bit32),
+                    offset: offset as i32,
+                    bits: operand_bits,
+                })
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn read_special_op_operand_8bit_result(
@@ -418,7 +456,17 @@ impl<'data> X86ByteStream<'data> {
                             second_mem,
                         ))
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        let second_mem = self.read_32bit_mod1_operand_16bit_result(
+                            modrm.2,
+                            operand_bits
+                        )?;
+
+                        Ok((
+                            Operand::Register { register: first_reg },
+                            second_mem,
+                        ))
+                    }
                 }
             }
             2 => {

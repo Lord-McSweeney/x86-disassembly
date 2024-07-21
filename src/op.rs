@@ -532,6 +532,11 @@ pub enum Operand {
     Constant32 {
         value: u32,
     },
+    GeneralRegisterAddressWordOrDword {
+        register: Register,
+        offset: i16,
+        bits: Bits,
+    },
     Register {
         register: Register
     },
@@ -542,6 +547,13 @@ pub enum Operand {
     RegistersAddressWordOrDword {
         registers: AddressRegisters,
         offset: i16,
+        bits: Bits,
+    },
+    ScaleIndexBaseAddressing {
+        scale: u8,
+        index: Register,
+        base: Register,
+        offset: i32,
         bits: Bits,
     },
     SegmentRegister {
@@ -583,7 +595,27 @@ impl fmt::Display for Operand {
             }
             Operand::Constant8 { value } => &format!("{:#04x}", value),
             Operand::Constant16 { value } => &format!("{:#06x}", value),
-            Operand::Constant32 { value } => &format!("{:#10x}", value),
+            Operand::Constant32 { value } => &format!("{:#010x}", value),
+            Operand::GeneralRegisterAddressWordOrDword { register, offset, bits } => {
+                let annotation = match bits {
+                    Bits::Bit16 => "word",
+                    Bits::Bit32 => "dword",
+                };
+
+                if *offset == 0 {
+                    &format!("{} [{}]", annotation, register)
+                } else if *offset < 0 && *offset >= -0xFF {
+                    &format!("{} [{}-{:#04x}]", annotation, register, -offset)
+                } else if *offset > 0 && *offset <= 0xFF {
+                    &format!("{} [{}+{:#04x}]", annotation, register, offset)
+                } else if *offset < 0 {
+                    &format!("{} [{}-{:#06x}]", annotation, register, -offset)
+                } else if *offset > 0 {
+                    &format!("{} [{}+{:#06x}]", annotation, register, offset)
+                } else {
+                    unreachable!()
+                }
+            }
             Operand::Register { register } => &format!("{}", register),
             Operand::RegistersAddressByte { registers, offset } => {
                 if *offset == 0 {
@@ -616,6 +648,53 @@ impl fmt::Display for Operand {
                     &format!("{} [{}-{:#06x}]", annotation, registers, -offset)
                 } else if *offset > 0 {
                     &format!("{} [{}+{:#06x}]", annotation, registers, offset)
+                } else {
+                    unreachable!()
+                }
+            }
+            Operand::ScaleIndexBaseAddressing {
+                scale,
+                index,
+                base,
+                offset,
+                bits,
+            } => {
+                let annotation = match bits {
+                    Bits::Bit16 => "word",
+                    Bits::Bit32 => "dword",
+                };
+
+                let real_scale = match scale {
+                    0 => 1,
+                    1 => 2,
+                    2 => 4,
+                    3 => 8,
+                    _ => unreachable!(),
+                };
+
+                let scale_index_base = if matches!(index, Register::ESp) {
+                    // When the index register is ESP, it is ignored
+                    // (apparently zero), and only the base register
+                    // is taken into account.
+                    &format!("{}", base)
+                } else {
+                    if real_scale == 1 {
+                        &format!("{}+{}", index, base)
+                    } else {
+                        &format!("{}*{}+{}", real_scale, index, base)
+                    }
+                };
+
+                if *offset == 0 {
+                    &format!("{} [{}]", annotation, scale_index_base)
+                } else if *offset < 0 && *offset >= -0xFF {
+                    &format!("{} [{}-{:#04x}]", annotation, scale_index_base, -offset)
+                } else if *offset > 0 && *offset <= 0xFF {
+                    &format!("{} [{}+{:#04x}]", annotation, scale_index_base, offset)
+                } else if *offset < 0 {
+                    &format!("{} [{}-{:#010x}]", annotation, scale_index_base, -offset)
+                } else if *offset > 0 {
+                    &format!("{} [{}+{:#010x}]", annotation, scale_index_base, offset)
                 } else {
                     unreachable!()
                 }
