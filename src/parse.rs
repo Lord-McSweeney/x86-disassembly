@@ -828,6 +828,17 @@ pub fn parse_data<'data>(
                 0x0F => {
                     let second_byte = stream.read_u8()?;
                     match second_byte {
+                        0x1E => {
+                            let modrm = stream.read_modrm()?;
+
+                            let operand = stream.read_special_op_operand_16_or_32bit_result(
+                                modrm,
+                                operand_bits,
+                                address_bits,
+                            )?;
+
+                            (OpCode::Nop, vec![operand])
+                        }
                         0x83..=0x87 | 0x8C => {
                             let instr = match second_byte {
                                 0x83 => OpCode::Jae,
