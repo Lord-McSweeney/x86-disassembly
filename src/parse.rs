@@ -472,7 +472,12 @@ impl<'data> X86ByteStream<'data> {
                             operand_bits,
                         )?
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        self.read_32bit_mod1_operand_16bit_result(
+                            modrm.2,
+                            operand_bits,
+                        )?
+                    }
                 }
             }
             3 => {
@@ -1608,6 +1613,9 @@ pub fn parse_data<'data>(
                         operand,
                         second_operand,
                     ])
+                }
+                0xC9 => {
+                    (OpCode::Leave, vec![])
                 }
                 0xCB => {
                     (OpCode::RetF, vec![])

@@ -173,6 +173,7 @@ pub enum OpCode {
     Jmp,
     Jz,
     Lea,
+    Leave,
     LodSb,
     LodSw,
     Loop,
@@ -250,6 +251,7 @@ impl fmt::Display for OpCode {
             OpCode::Jmp => "JMP",
             OpCode::Jz => "JZ",
             OpCode::Lea => "LEA",
+            OpCode::Leave => "LEAVE",
             OpCode::LodSb => "LODSB",
             OpCode::LodSw => "LODSW",
             OpCode::Loop => "LOOP",
@@ -513,6 +515,10 @@ pub enum Operand {
     AbsoluteAddress32Byte {
         address: u32,
     },
+    AbsoluteAddress32WordOrDword {
+        address: u32,
+        bits: Bits,
+    },
     AbsoluteConstantSegmentedOffset16 {
         segment: u16,
         offset: u16,
@@ -595,6 +601,14 @@ impl fmt::Display for Operand {
         let string = match self {
             Operand::AbsoluteAddress32Byte { address } => {
                 &format!("byte [{:#010x}]", address)
+            }
+            Operand::AbsoluteAddress32WordOrDword { address, bits } => {
+                let annotation = match bits {
+                    Bits::Bit16 => "word",
+                    Bits::Bit32 => "dword",
+                };
+
+                &format!("{} [{:#010x}]", annotation, address)
             }
             Operand::AbsoluteConstantSegmentedOffset16 { segment, offset } => {
                 &format!("{:#06x}:{:#06x}", segment, offset)
