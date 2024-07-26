@@ -480,12 +480,28 @@ impl<'data> X86ByteStream<'data> {
                     }
                 }
             }
+            2 => {
+                match address_bits {
+                    Bits::Bit16 => {
+                        self.read_16bit_mod2_operand_16bit_result(
+                            modrm.2,
+                            operand_bits,
+                        )?
+                    }
+                    Bits::Bit32 => {
+                        self.read_32bit_mod2_operand_16bit_result(
+                            modrm.2,
+                            operand_bits,
+                        )?
+                    }
+                }
+            }
             3 => {
                 Operand::Register {
                     register: Register::from_byte(modrm.2, operand_bits)
                 }
             }
-            _ => return Err(ParseError::UnimplementedMod(modrm.0)),
+            _ => unreachable!(),
         })
     }
 
