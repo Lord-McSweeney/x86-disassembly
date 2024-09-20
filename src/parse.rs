@@ -337,6 +337,43 @@ impl<'data> X86ByteStream<'data> {
         }
     }
 
+    fn read_32bit_mod0_operand_16bit_result(
+        &mut self,
+        rm: u8,
+        operand_bits: Bits,
+    ) -> Result<Operand, ParseError> {
+        match rm {
+            0..=3 | 6..=7 => {
+                // EAX, ECX, EDX, EBX, ESI, or EDI
+                let register = Register::from_byte(rm, Bits::Bit32);
+
+                Ok(Operand::GeneralRegisterAddressWordOrDword {
+                    register,
+                    offset: 0,
+                    bits: operand_bits,
+                })
+            }
+            4 => {
+                let sib = self.read_sib()?;
+
+                Ok(Operand::ScaleIndexBaseAddressingWordOrDword {
+                    scale: sib.0,
+                    index: Register::from_byte(sib.1, Bits::Bit32),
+                    base: Register::from_byte(sib.2, Bits::Bit32),
+                    offset: 0,
+                    bits: operand_bits,
+                })
+            }
+            5 => {
+                Ok(Operand::AbsoluteAddress32WordOrDword {
+                    address: self.read_u32()?,
+                    bits: operand_bits,
+                })
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn read_32bit_mod1_operand_16bit_result(
         &mut self,
         rm: u8,
@@ -563,7 +600,17 @@ impl<'data> X86ByteStream<'data> {
                             second_mem,
                         ))
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        let second_mem = self.read_32bit_mod0_operand_16bit_result(
+                            modrm.2,
+                            operand_bits
+                        )?;
+
+                        Ok((
+                            Operand::Register { register: first_reg },
+                            second_mem,
+                        ))
+                    }
                 }
             }
             1 => {
