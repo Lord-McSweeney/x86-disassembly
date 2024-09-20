@@ -991,6 +991,15 @@ pub fn parse_data<'data>(
 
                     (OpCode::And, vec![ax_reg, second_operand])
                 }
+                0x29 => {
+                    let operands = stream.read_regpair_general(
+                        operand_bits,
+                        address_bits,
+                        false,
+                    )?;
+
+                    (OpCode::Sub, vec![operands.1, operands.0])
+                }
                 0x2B => {
                     let operands = stream.read_regpair_general(
                         operand_bits,
