@@ -727,6 +727,7 @@ pub fn parse_data<'data>(
     let mut jump_targets = Vec::new();
 
     let start_pos = opts.start_at;
+    let load_offset = opts.load_offset;
 
     while stream.pos < start_pos {
         let read_bytes = (start_pos - stream.pos).min(16);
@@ -955,7 +956,7 @@ pub fn parse_data<'data>(
                                 Bits::Bit16 => {
                                     let offset = stream.read_i16()?;
 
-                                    jump_targets.push(stream.pos as isize + offset as isize);
+                                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                                     (instr, vec![Operand::RelativeOffset16 {
                                         offset
@@ -964,7 +965,7 @@ pub fn parse_data<'data>(
                                 Bits::Bit32 => {
                                     let offset = stream.read_i32()?;
 
-                                    jump_targets.push(stream.pos as isize + offset as isize);
+                                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                                     (instr, vec![Operand::RelativeOffset32 {
                                         offset
@@ -1235,7 +1236,7 @@ pub fn parse_data<'data>(
                 0x72 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jb, vec![Operand::RelativeOffset8 {
                         offset
@@ -1244,7 +1245,7 @@ pub fn parse_data<'data>(
                 0x73 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jae, vec![Operand::RelativeOffset8 {
                         offset
@@ -1253,7 +1254,7 @@ pub fn parse_data<'data>(
                 0x74 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jz, vec![Operand::RelativeOffset8 {
                         offset
@@ -1262,7 +1263,7 @@ pub fn parse_data<'data>(
                 0x75 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jnz, vec![Operand::RelativeOffset8 {
                         offset
@@ -1271,7 +1272,7 @@ pub fn parse_data<'data>(
                 0x76 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jbe, vec![Operand::RelativeOffset8 {
                         offset
@@ -1280,7 +1281,7 @@ pub fn parse_data<'data>(
                 0x77 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Ja, vec![Operand::RelativeOffset8 {
                         offset
@@ -1289,7 +1290,7 @@ pub fn parse_data<'data>(
                 0x7C => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jl, vec![Operand::RelativeOffset8 {
                         offset
@@ -1298,7 +1299,7 @@ pub fn parse_data<'data>(
                 0x7D => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jge, vec![Operand::RelativeOffset8 {
                         offset
@@ -1307,7 +1308,7 @@ pub fn parse_data<'data>(
                 0x7F => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jg, vec![Operand::RelativeOffset8 {
                         offset
@@ -1815,7 +1816,7 @@ pub fn parse_data<'data>(
                 0xE0 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::LoopNz, vec![Operand::RelativeOffset8 {
                         offset
@@ -1824,7 +1825,7 @@ pub fn parse_data<'data>(
                 0xE2 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Loop, vec![Operand::RelativeOffset8 {
                         offset
@@ -1833,7 +1834,7 @@ pub fn parse_data<'data>(
                 0xE3 => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     (OpCode::Jcxz, vec![Operand::RelativeOffset8 {
                         offset
@@ -1844,7 +1845,7 @@ pub fn parse_data<'data>(
                         Bits::Bit16 => {
                             let offset = stream.read_i16()?;
 
-                            jump_targets.push(stream.pos as isize + offset as isize);
+                            jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                             (OpCode::Call, vec![Operand::RelativeOffset16 {
                                 offset
@@ -1853,7 +1854,7 @@ pub fn parse_data<'data>(
                         Bits::Bit32 => {
                             let offset = stream.read_i32()?;
 
-                            jump_targets.push(stream.pos as isize + offset as isize);
+                            jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                             (OpCode::Call, vec![Operand::RelativeOffset32 {
                                 offset
@@ -1866,7 +1867,7 @@ pub fn parse_data<'data>(
                         Bits::Bit16 => {
                             let offset = stream.read_i16()?;
 
-                            jump_targets.push(stream.pos as isize + offset as isize);
+                            jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                             (OpCode::Jmp, vec![Operand::RelativeOffset16 {
                                 offset
@@ -1875,7 +1876,7 @@ pub fn parse_data<'data>(
                         Bits::Bit32 => {
                             let offset = stream.read_i32()?;
 
-                            jump_targets.push(stream.pos as isize + offset as isize);
+                            jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                             (OpCode::Jmp, vec![Operand::RelativeOffset32 {
                                 offset
@@ -1914,7 +1915,7 @@ pub fn parse_data<'data>(
                 0xEB => {
                     let offset = stream.read_i8()?;
 
-                    jump_targets.push(stream.pos as isize + offset as isize);
+                    jump_targets.push(stream.pos as isize + offset as isize + load_offset as isize);
 
                     let jump_result = (OpCode::Jmp, vec![Operand::RelativeOffset8 {
                         offset

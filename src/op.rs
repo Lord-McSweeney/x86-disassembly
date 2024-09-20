@@ -38,8 +38,12 @@ pub struct Op<'data> {
     pub operands: Vec<Operand>,
 }
 
-impl<'data> fmt::Display for Op<'data> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl<'data> Op<'data> {
+    pub fn print_with_targets(&self, valid_jump_targets: &[usize], current_offset: usize) -> String {
+        use std::fmt::Write;
+
+        let mut result_string = String::with_capacity(24);
+
         let mut raw_data = String::with_capacity(16);
         for (i, byte) in self.raw_data.iter().enumerate() {
             raw_data.push_str(&format!("{:02x}", byte));
@@ -48,7 +52,7 @@ impl<'data> fmt::Display for Op<'data> {
             }
         }
 
-        write!(f, "{:53}", raw_data)?;
+        write!(result_string, "{:53}", raw_data).unwrap();
 
         let mut prefixes = String::with_capacity(8);
         for prefix in &self.prefixes {
@@ -57,12 +61,12 @@ impl<'data> fmt::Display for Op<'data> {
             prefixes.push_str(" ");
         }
 
-        write!(f, "{}", prefixes)?;
+        write!(result_string, "{}", prefixes).unwrap();
 
-        write!(f, "{}", self.opcode)?;
+        write!(result_string, "{}", self.opcode).unwrap();
 
         if matches!(self.opcode, OpCode::SpecialData) {
-            write!(f, " ")?;
+            write!(result_string, " ").unwrap();
 
             let mut data = String::with_capacity(32);
             for byte in self.raw_data {
@@ -75,22 +79,24 @@ impl<'data> fmt::Display for Op<'data> {
                 }
             }
 
-            write!(f, "{}", data)
+            write!(result_string, "{}", data).unwrap()
         } else {
             if !self.operands.is_empty() {
-                write!(f, " ")?;
+                write!(result_string, " ").unwrap();
             }
 
             let mut operands = String::with_capacity(8);
             for (i, operand) in self.operands.iter().enumerate() {
-                operands.push_str(&format!("{}", operand));
+                operands.push_str(&operand.print_with_targets(valid_jump_targets, current_offset));
                 if i != self.operands.len() - 1 {
                     operands.push_str(", ");
                 }
             }
 
-            write!(f, "{}", operands)
-        }
+            write!(result_string, "{}", operands).unwrap()
+        };
+
+        result_string
     }
 }
 
@@ -598,11 +604,11 @@ pub enum Operand {
     },
 }
 
-impl fmt::Display for Operand {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let string = match self {
+impl Operand {
+    pub fn print_with_targets(&self, valid_jump_targets: &[usize], current_offset: usize) -> String {
+        match self {
             Operand::AbsoluteAddress32Byte { address } => {
-                &format!("byte [{:#010x}]", address)
+                format!("byte [{:#010x}]", address)
             }
             Operand::AbsoluteAddress32WordOrDword { address, bits } => {
                 let annotation = match bits {
@@ -610,16 +616,16 @@ impl fmt::Display for Operand {
                     Bits::Bit32 => "dword",
                 };
 
-                &format!("{} [{:#010x}]", annotation, address)
+                format!("{} [{:#010x}]", annotation, address)
             }
             Operand::AbsoluteConstantSegmentedOffset16 { segment, offset } => {
-                &format!("{:#06x}:{:#06x}", segment, offset)
+                format!("{:#06x}:{:#06x}", segment, offset)
             }
             Operand::AbsoluteConstantSegmentedOffset32 { segment, offset } => {
-                &format!("{:#06x}:{:#010x}", segment, offset)
+                format!("{:#06x}:{:#010x}", segment, offset)
             }
             Operand::AbsoluteRegisterSegmentedByteAddress16 { register, address } => {
-                &format!("byte [{}:{:#06x}]", register, address)
+                format!("byte [{}:{:#06x}]", register, address)
             }
             Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 { register, address, bits } => {
                 let annotation = match bits {
@@ -627,22 +633,22 @@ impl fmt::Display for Operand {
                     Bits::Bit32 => "dword",
                 };
 
-                &format!("{} [{}:{:#06x}]", annotation, register, address)
+                format!("{} [{}:{:#06x}]", annotation, register, address)
             }
-            Operand::Constant8 { value } => &format!("{:#04x}", value),
-            Operand::Constant16 { value } => &format!("{:#06x}", value),
-            Operand::Constant32 { value } => &format!("{:#010x}", value),
+            Operand::Constant8 { value } => format!("{:#04x}", value),
+            Operand::Constant16 { value } => format!("{:#06x}", value),
+            Operand::Constant32 { value } => format!("{:#010x}", value),
             Operand::GeneralRegisterAddressByte { register, offset } => {
                 if *offset == 0 {
-                    &format!("byte [{}]", register)
+                    format!("byte [{}]", register)
                 } else if *offset < 0 && *offset >= -0xFF {
-                    &format!("byte [{}-{:#04x}]", register, -offset)
+                    format!("byte [{}-{:#04x}]", register, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("byte [{}+{:#04x}]", register, offset)
+                    format!("byte [{}+{:#04x}]", register, offset)
                 } else if *offset < 0 {
-                    &format!("byte [{}-{:#06x}]", register, -offset)
+                    format!("byte [{}-{:#06x}]", register, -offset)
                 } else if *offset > 0 {
-                    &format!("byte [{}+{:#06x}]", register, offset)
+                    format!("byte [{}+{:#06x}]", register, offset)
                 } else {
                     unreachable!()
                 }
@@ -654,31 +660,31 @@ impl fmt::Display for Operand {
                 };
 
                 if *offset == 0 {
-                    &format!("{} [{}]", annotation, register)
+                    format!("{} [{}]", annotation, register)
                 } else if *offset < 0 && *offset >= -0xFF {
-                    &format!("{} [{}-{:#04x}]", annotation, register, -offset)
+                    format!("{} [{}-{:#04x}]", annotation, register, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("{} [{}+{:#04x}]", annotation, register, offset)
+                    format!("{} [{}+{:#04x}]", annotation, register, offset)
                 } else if *offset < 0 {
-                    &format!("{} [{}-{:#06x}]", annotation, register, -offset)
+                    format!("{} [{}-{:#06x}]", annotation, register, -offset)
                 } else if *offset > 0 {
-                    &format!("{} [{}+{:#06x}]", annotation, register, offset)
+                    format!("{} [{}+{:#06x}]", annotation, register, offset)
                 } else {
                     unreachable!()
                 }
             }
-            Operand::Register { register } => &format!("{}", register),
+            Operand::Register { register } => format!("{}", register),
             Operand::RegistersAddressByte { registers, offset } => {
                 if *offset == 0 {
-                    &format!("byte [{}]", registers)
+                    format!("byte [{}]", registers)
                 } else if *offset < 0 && *offset >= -0xFF {
-                    &format!("byte [{}-{:#04x}]", registers, -offset)
+                    format!("byte [{}-{:#04x}]", registers, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("byte [{}+{:#04x}]", registers, offset)
+                    format!("byte [{}+{:#04x}]", registers, offset)
                 } else if *offset < 0 {
-                    &format!("byte [{}-{:#06x}]", registers, -offset)
+                    format!("byte [{}-{:#06x}]", registers, -offset)
                 } else if *offset > 0 {
-                    &format!("byte [{}+{:#06x}]", registers, offset)
+                    format!("byte [{}+{:#06x}]", registers, offset)
                 } else {
                     unreachable!()
                 }
@@ -690,15 +696,15 @@ impl fmt::Display for Operand {
                 };
 
                 if *offset == 0 {
-                    &format!("{} [{}]", annotation, registers)
+                    format!("{} [{}]", annotation, registers)
                 } else if *offset < 0 && *offset >= -0xFF {
-                    &format!("{} [{}-{:#04x}]", annotation, registers, -offset)
+                    format!("{} [{}-{:#04x}]", annotation, registers, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("{} [{}+{:#04x}]", annotation, registers, offset)
+                    format!("{} [{}+{:#04x}]", annotation, registers, offset)
                 } else if *offset < 0 {
-                    &format!("{} [{}-{:#06x}]", annotation, registers, -offset)
+                    format!("{} [{}-{:#06x}]", annotation, registers, -offset)
                 } else if *offset > 0 {
-                    &format!("{} [{}+{:#06x}]", annotation, registers, offset)
+                    format!("{} [{}+{:#06x}]", annotation, registers, offset)
                 } else {
                     unreachable!()
                 }
@@ -721,25 +727,25 @@ impl fmt::Display for Operand {
                     // When the index register is ESP, it is ignored
                     // (apparently zero), and only the base register
                     // is taken into account.
-                    &format!("{}", base)
+                    format!("{}", base)
                 } else {
                     if real_scale == 1 {
-                        &format!("{}+{}", index, base)
+                        format!("{}+{}", index, base)
                     } else {
-                        &format!("{}*{}+{}", real_scale, index, base)
+                        format!("{}*{}+{}", real_scale, index, base)
                     }
                 };
 
                 if *offset == 0 {
-                    &format!("byte [{}]", scale_index_base)
+                    format!("byte [{}]", scale_index_base)
                 } else if *offset < 0 && *offset >= -0xFF {
-                    &format!("byte [{}-{:#04x}]", scale_index_base, -offset)
+                    format!("byte [{}-{:#04x}]", scale_index_base, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("byte [{}+{:#04x}]", scale_index_base, offset)
+                    format!("byte [{}+{:#04x}]", scale_index_base, offset)
                 } else if *offset < 0 {
-                    &format!("byte [{}-{:#010x}]", scale_index_base, -offset)
+                    format!("byte [{}-{:#010x}]", scale_index_base, -offset)
                 } else if *offset > 0 {
-                    &format!("byte [{}+{:#010x}]", scale_index_base, offset)
+                    format!("byte [{}+{:#010x}]", scale_index_base, offset)
                 } else {
                     unreachable!()
                 }
@@ -768,54 +774,76 @@ impl fmt::Display for Operand {
                     // When the index register is ESP, it is ignored
                     // (apparently zero), and only the base register
                     // is taken into account.
-                    &format!("{}", base)
+                    format!("{}", base)
                 } else {
                     if real_scale == 1 {
-                        &format!("{}+{}", index, base)
+                        format!("{}+{}", index, base)
                     } else {
-                        &format!("{}*{}+{}", real_scale, index, base)
+                        format!("{}*{}+{}", real_scale, index, base)
                     }
                 };
 
                 if *offset == 0 {
-                    &format!("{} [{}]", annotation, scale_index_base)
+                    format!("{} [{}]", annotation, scale_index_base)
                 } else if *offset < 0 && *offset >= -0xFF {
-                    &format!("{} [{}-{:#04x}]", annotation, scale_index_base, -offset)
+                    format!("{} [{}-{:#04x}]", annotation, scale_index_base, -offset)
                 } else if *offset > 0 && *offset <= 0xFF {
-                    &format!("{} [{}+{:#04x}]", annotation, scale_index_base, offset)
+                    format!("{} [{}+{:#04x}]", annotation, scale_index_base, offset)
                 } else if *offset < 0 {
-                    &format!("{} [{}-{:#010x}]", annotation, scale_index_base, -offset)
+                    format!("{} [{}-{:#010x}]", annotation, scale_index_base, -offset)
                 } else if *offset > 0 {
-                    &format!("{} [{}+{:#010x}]", annotation, scale_index_base, offset)
+                    format!("{} [{}+{:#010x}]", annotation, scale_index_base, offset)
                 } else {
                     unreachable!()
                 }
             }
-            Operand::SegmentRegister { register } => &format!("{}", register),
-            Operand::SmallRegister { register } => &format!("{}", register),
+            Operand::SegmentRegister { register } => format!("{}", register),
+            Operand::SmallRegister { register } => format!("{}", register),
             Operand::RelativeOffset8 { offset } => {
-                if *offset > 0 {
-                    &format!("+{:#04x}", offset)
+                let target_pos = current_offset as isize + *offset as isize;
+
+                if valid_jump_targets.iter().any(|t| *t == target_pos as usize) {
+                    if target_pos <= 0xFFFF {
+                        format!("addr_{:04x}", target_pos)
+                    } else {
+                        format!("addr_{:08x}", target_pos)
+                    }
+                } else if *offset > 0 {
+                    format!("+{:#04x}", offset)
                 } else {
-                    &format!("-{:#04x}", -offset)
+                    format!("-{:#04x}", -offset)
                 }
             }
             Operand::RelativeOffset16 { offset } => {
-                if *offset > 0 {
-                    &format!("+{:#06x}", offset)
+                let target_pos = current_offset as isize + *offset as isize;
+
+                if valid_jump_targets.iter().any(|t| *t == target_pos as usize) {
+                    if target_pos <= 0xFFFF {
+                        format!("addr_{:04x}", target_pos)
+                    } else {
+                        format!("addr_{:08x}", target_pos)
+                    }
+                } else if *offset > 0 {
+                    format!("+{:#06x}", offset)
                 } else {
-                    &format!("-{:#06x}", -offset)
+                    format!("-{:#06x}", -offset)
                 }
             }
             Operand::RelativeOffset32 { offset } => {
-                if *offset > 0 {
-                    &format!("+{:#010x}", offset)
+                let target_pos = current_offset as isize + *offset as isize;
+
+                if valid_jump_targets.iter().any(|t| *t == target_pos as usize) {
+                    if target_pos <= 0xFFFF {
+                        format!("addr_{:04x}", target_pos)
+                    } else {
+                        format!("addr_{:08x}", target_pos)
+                    }
+                } else if *offset > 0 {
+                    format!("+{:#010x}", offset)
                 } else {
-                    &format!("-{:#010x}", -offset)
+                    format!("-{:#010x}", -offset)
                 }
             }
-        };
-
-        write!(f, "{}", string)
+        }
     }
 }
