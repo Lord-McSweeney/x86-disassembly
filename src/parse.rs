@@ -594,7 +594,9 @@ impl<'data> X86ByteStream<'data> {
                     Bits::Bit16 => {
                         self.read_16bit_mod0_operand_16bit_result(modrm.2, Bits::Bit16)?
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        self.read_32bit_mod0_operand_16bit_result(modrm.2, Bits::Bit16)?
+                    }
                 };
 
                 Ok((
