@@ -1861,6 +1861,9 @@ pub fn parse_data<'data>(
                         jump_result
                     }
                 }
+                0xF4 => {
+                    (OpCode::Hlt, vec![])
+                }
                 0xF6 => {
                     let modrm = stream.read_modrm()?;
                     match modrm.1 {
