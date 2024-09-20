@@ -20,9 +20,9 @@ impl fmt::Display for ParseError {
             ParseError::InvalidReg(reg) => write!(f, "invalid modr/m reg {}", reg),
             ParseError::InvalidSegmentRegister(num) => write!(f, "invalid segment register #{}", num),
             ParseError::OutOfData => write!(f, "reached end of stream"),
-            ParseError::UnimplementedMod(mod_part) => write!(f, "unimplemented ModR/M mod {}", mod_part),
+            ParseError::UnimplementedMod(mod_part) => write!(f, "unimplemented modr/m mod {}", mod_part),
             ParseError::UnimplementedOp(opcode) => write!(f, "unimplemented opcode {:#04x}", opcode),
-            ParseError::UnimplementedReg(reg_part) => write!(f, "unimplemented ModR/M reg {}", reg_part),
+            ParseError::UnimplementedReg(reg_part) => write!(f, "unimplemented modr/m reg {}", reg_part),
             ParseError::UnimplementedTwoByteOp(opcode) => write!(f, "unimplemented twobyte opcode {:#04x}", opcode),
             ParseError::Unimplemented32Bit => write!(f, "unimplemented 32-bit operation"),
         }
