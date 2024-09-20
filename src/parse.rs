@@ -337,6 +337,37 @@ impl<'data> X86ByteStream<'data> {
         }
     }
 
+    fn read_32bit_mod2_operand_8bit_result(
+        &mut self,
+        rm: u8,
+    ) -> Result<Operand, ParseError> {
+        match rm {
+            0..=3 | 5..=7 => {
+                // EAX, ECX, EDX, EBX, EBP, ESI, or EDI
+                let register = Register::from_byte(rm, Bits::Bit32);
+
+                let offset = self.read_i32()?;
+
+                Ok(Operand::GeneralRegisterAddressByte {
+                    register,
+                    offset: offset as i16,
+                })
+            }
+            4 => {
+                let sib = self.read_sib()?;
+                let offset = self.read_i32()?;
+
+                Ok(Operand::ScaleIndexBaseAddressingByte {
+                    scale: sib.0,
+                    index: Register::from_byte(sib.1, Bits::Bit32),
+                    base: Register::from_byte(sib.2, Bits::Bit32),
+                    offset: offset as i32,
+                })
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn read_32bit_mod0_operand_16bit_result(
         &mut self,
         rm: u8,
@@ -473,7 +504,9 @@ impl<'data> X86ByteStream<'data> {
                     Bits::Bit16 => {
                         self.read_16bit_mod2_operand_8bit_result(modrm.2)?
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        self.read_32bit_mod2_operand_8bit_result(modrm.2)?
+                    }
                 }
             }
             3 => {
