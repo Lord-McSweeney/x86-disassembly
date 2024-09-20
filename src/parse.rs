@@ -531,7 +531,12 @@ impl<'data> X86ByteStream<'data> {
                             operand_bits,
                         )?
                     }
-                    Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                    Bits::Bit32 => {
+                        self.read_32bit_mod0_operand_16bit_result(
+                            modrm.2,
+                            operand_bits,
+                        )?
+                    }
                 }
             }
             1 => {
@@ -779,6 +784,7 @@ pub fn parse_data<'data>(
                     0x26 => prefixes.push(OpPrefix::Es),
                     0x2E => prefixes.push(OpPrefix::Cs),
                     0x64 => prefixes.push(OpPrefix::Fs),
+                    0x65 => prefixes.push(OpPrefix::Gs),
                     0x66 => {
                         op_size_applied = true;
                         prefixes.push(OpPrefix::OpSize);
@@ -930,7 +936,7 @@ pub fn parse_data<'data>(
                 0x0F => {
                     let second_byte = stream.read_u8()?;
                     match second_byte {
-                        0x1E => {
+                        0x1E | 0x1F => {
                             let modrm = stream.read_modrm()?;
 
                             let operand = stream.read_special_op_operand_16_or_32bit_result(
@@ -1534,9 +1540,10 @@ pub fn parse_data<'data>(
                         Bits::Bit16 => {
                             let address = stream.read_u16()?;
 
-                            Operand::AbsoluteRegisterSegmentedByteAddress16 {
+                            Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 {
                                 register: SegmentRegister::Ds,
                                 address,
+                                bits: operand_bits,
                             }
                         }
                         Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
@@ -1572,9 +1579,10 @@ pub fn parse_data<'data>(
                         Bits::Bit16 => {
                             let address = stream.read_u16()?;
 
-                            Operand::AbsoluteRegisterSegmentedByteAddress16 {
+                            Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 {
                                 register: SegmentRegister::Ds,
                                 address,
+                                bits: operand_bits,
                             }
                         }
                         Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
