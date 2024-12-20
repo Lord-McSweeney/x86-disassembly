@@ -42,7 +42,10 @@ pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
                 i += 1;
 
                 if let Some(param) = param {
-                    let start_at = if let Some(hex) = param.strip_prefix("0x").or_else(|| param.strip_prefix("0X")) {
+                    let start_at = if let Some(hex) = param
+                        .strip_prefix("0x")
+                        .or_else(|| param.strip_prefix("0X"))
+                    {
                         usize::from_str_radix(hex, 16).ok()
                     } else {
                         param.parse().ok()
@@ -61,7 +64,10 @@ pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
                 i += 1;
 
                 if let Some(param) = param {
-                    let stop_after = if let Some(hex) = param.strip_prefix("0x").or_else(|| param.strip_prefix("0X")) {
+                    let stop_after = if let Some(hex) = param
+                        .strip_prefix("0x")
+                        .or_else(|| param.strip_prefix("0X"))
+                    {
                         usize::from_str_radix(hex, 16).ok()
                     } else {
                         param.parse().ok()
@@ -77,7 +83,10 @@ pub fn parse_arguments(args: &[String]) -> Result<Options, String> {
                 i += 1;
 
                 if let Some(param) = param {
-                    let start_at = if let Some(hex) = param.strip_prefix("0x").or_else(|| param.strip_prefix("0X")) {
+                    let start_at = if let Some(hex) = param
+                        .strip_prefix("0x")
+                        .or_else(|| param.strip_prefix("0X"))
+                    {
                         usize::from_str_radix(hex, 16).ok()
                     } else {
                         param.parse().ok()

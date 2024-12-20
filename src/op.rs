@@ -18,12 +18,22 @@ impl fmt::Display for ParseError {
         match self {
             ParseError::InvalidLeaMod => write!(f, "invalid modr/m mod 3 in lea instruction"),
             ParseError::InvalidReg(reg) => write!(f, "invalid modr/m reg {}", reg),
-            ParseError::InvalidSegmentRegister(num) => write!(f, "invalid segment register #{}", num),
+            ParseError::InvalidSegmentRegister(num) => {
+                write!(f, "invalid segment register #{}", num)
+            }
             ParseError::OutOfData => write!(f, "reached end of stream"),
-            ParseError::UnimplementedMod(mod_part) => write!(f, "unimplemented modr/m mod {}", mod_part),
-            ParseError::UnimplementedOp(opcode) => write!(f, "unimplemented opcode {:#04x}", opcode),
-            ParseError::UnimplementedReg(reg_part) => write!(f, "unimplemented modr/m reg {}", reg_part),
-            ParseError::UnimplementedTwoByteOp(opcode) => write!(f, "unimplemented twobyte opcode {:#04x}", opcode),
+            ParseError::UnimplementedMod(mod_part) => {
+                write!(f, "unimplemented modr/m mod {}", mod_part)
+            }
+            ParseError::UnimplementedOp(opcode) => {
+                write!(f, "unimplemented opcode {:#04x}", opcode)
+            }
+            ParseError::UnimplementedReg(reg_part) => {
+                write!(f, "unimplemented modr/m reg {}", reg_part)
+            }
+            ParseError::UnimplementedTwoByteOp(opcode) => {
+                write!(f, "unimplemented twobyte opcode {:#04x}", opcode)
+            }
             ParseError::Unimplemented32Bit => write!(f, "unimplemented 32-bit operation"),
         }
     }
@@ -39,7 +49,11 @@ pub struct Op<'data> {
 }
 
 impl<'data> Op<'data> {
-    pub fn print_with_targets(&self, valid_jump_targets: &[usize], current_offset: usize) -> String {
+    pub fn print_with_targets(
+        &self,
+        valid_jump_targets: &[usize],
+        current_offset: usize,
+    ) -> String {
         use std::fmt::Write;
 
         let mut result_string = String::with_capacity(24);
@@ -167,6 +181,7 @@ pub enum OpCode {
     Div,
     Hlt,
     Imul,
+    Iret,
     Inc,
     InSb,
     Int,
@@ -197,6 +212,7 @@ pub enum OpCode {
     Nop,
     Not,
     Or,
+    Out,
     OutSb,
     OutSw,
     Pop,
@@ -246,6 +262,7 @@ impl fmt::Display for OpCode {
             OpCode::Div => "DIV",
             OpCode::Hlt => "HLT",
             OpCode::Imul => "IMUL",
+            OpCode::Iret => "IRET",
             OpCode::Inc => "INC",
             OpCode::InSb => "INSB",
             OpCode::Int => "INT",
@@ -276,6 +293,7 @@ impl fmt::Display for OpCode {
             OpCode::Nop => "NOP",
             OpCode::Not => "NOT",
             OpCode::Or => "OR",
+            OpCode::Out => "OUT",
             OpCode::OutSb => "OUTSB",
             OpCode::OutSw => "OUTSW",
             OpCode::Pop => "POP",
@@ -404,32 +422,28 @@ impl fmt::Display for Register {
 impl Register {
     pub fn from_byte(byte: u8, bits: Bits) -> Self {
         match bits {
-            Bits::Bit16 => {
-                match byte {
-                    0 => Register::Ax,
-                    1 => Register::Cx,
-                    2 => Register::Dx,
-                    3 => Register::Bx,
-                    4 => Register::Sp,
-                    5 => Register::Bp,
-                    6 => Register::Si,
-                    7 => Register::Di,
-                    _ => unreachable!(),
-                }
-            }
-            Bits::Bit32 => {
-                match byte {
-                    0 => Register::EAx,
-                    1 => Register::ECx,
-                    2 => Register::EDx,
-                    3 => Register::EBx,
-                    4 => Register::ESp,
-                    5 => Register::EBp,
-                    6 => Register::ESi,
-                    7 => Register::EDi,
-                    _ => unreachable!(),
-                }
-            }
+            Bits::Bit16 => match byte {
+                0 => Register::Ax,
+                1 => Register::Cx,
+                2 => Register::Dx,
+                3 => Register::Bx,
+                4 => Register::Sp,
+                5 => Register::Bp,
+                6 => Register::Si,
+                7 => Register::Di,
+                _ => unreachable!(),
+            },
+            Bits::Bit32 => match byte {
+                0 => Register::EAx,
+                1 => Register::ECx,
+                2 => Register::EDx,
+                3 => Register::EBx,
+                4 => Register::ESp,
+                5 => Register::EBp,
+                6 => Register::ESi,
+                7 => Register::EDi,
+                _ => unreachable!(),
+            },
         }
     }
 }
@@ -443,7 +457,7 @@ pub enum SegmentRegister {
     Ss,
     Ds,
     Fs,
-    Gs
+    Gs,
 }
 
 impl fmt::Display for SegmentRegister {
@@ -470,7 +484,7 @@ impl SegmentRegister {
             3 => SegmentRegister::Ds,
             4 => SegmentRegister::Fs,
             5 => SegmentRegister::Gs,
-            _ => return Err(ParseError::InvalidSegmentRegister(byte))
+            _ => return Err(ParseError::InvalidSegmentRegister(byte)),
         })
     }
 }
@@ -565,7 +579,7 @@ pub enum Operand {
         bits: Bits,
     },
     Register {
-        register: Register
+        register: Register,
     },
     RegistersAddressByte {
         registers: AddressRegisters,
@@ -590,10 +604,10 @@ pub enum Operand {
         bits: Bits,
     },
     SegmentRegister {
-        register: SegmentRegister
+        register: SegmentRegister,
     },
     SmallRegister {
-        register: SmallRegister
+        register: SmallRegister,
     },
     RelativeOffset8 {
         offset: i8,
@@ -607,7 +621,11 @@ pub enum Operand {
 }
 
 impl Operand {
-    pub fn print_with_targets(&self, valid_jump_targets: &[usize], current_offset: usize) -> String {
+    pub fn print_with_targets(
+        &self,
+        valid_jump_targets: &[usize],
+        current_offset: usize,
+    ) -> String {
         match self {
             Operand::AbsoluteAddress32Byte { address } => {
                 format!("byte [{:#010x}]", address)
@@ -629,7 +647,11 @@ impl Operand {
             Operand::AbsoluteRegisterSegmentedByteAddress16 { register, address } => {
                 format!("byte [{}:{:#06x}]", register, address)
             }
-            Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 { register, address, bits } => {
+            Operand::AbsoluteRegisterSegmentedWordOrDwordAddress16 {
+                register,
+                address,
+                bits,
+            } => {
                 let annotation = match bits {
                     Bits::Bit16 => "word",
                     Bits::Bit32 => "dword",
@@ -655,7 +677,11 @@ impl Operand {
                     unreachable!()
                 }
             }
-            Operand::GeneralRegisterAddressWordOrDword { register, offset, bits } => {
+            Operand::GeneralRegisterAddressWordOrDword {
+                register,
+                offset,
+                bits,
+            } => {
                 let annotation = match bits {
                     Bits::Bit16 => "word",
                     Bits::Bit32 => "dword",
@@ -691,7 +717,11 @@ impl Operand {
                     unreachable!()
                 }
             }
-            Operand::RegistersAddressWordOrDword { registers, offset, bits } => {
+            Operand::RegistersAddressWordOrDword {
+                registers,
+                offset,
+                bits,
+            } => {
                 let annotation = match bits {
                     Bits::Bit16 => "word",
                     Bits::Bit32 => "dword",

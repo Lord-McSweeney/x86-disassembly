@@ -5,7 +5,8 @@ mod parse;
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
     let Some(file) = args.get(1) else {
-        eprintln!("Run as {} [file] [options]\n
+        eprintln!(
+            "Run as {} [file] [options]\n
 Options:
     --bits [bits]          Disassemble for x86-16 or x86-32, depending on [bits]
 
@@ -17,7 +18,9 @@ Options:
     --stop-after [offset]  Don't decompile data at and including the offset
                            [offset]. This will not cut off ops.
 
-    --load-offset [offset] State that the code is loaded at offset [offset].", args[0]);
+    --load-offset [offset] State that the code is loaded at offset [offset].",
+            args[0]
+        );
 
         std::process::exit(1);
     };
@@ -63,14 +66,23 @@ Options:
     let mut current_offset = load_offset;
     println!("                                                       start:");
     for op in ops {
-        if jump_targets.iter().any(|t| *t >= 0 && (*t as usize) == current_offset) {
-            println!("\n                                                       addr_{:04x}:", current_offset);
+        if jump_targets
+            .iter()
+            .any(|t| *t >= 0 && (*t as usize) == current_offset)
+        {
+            println!(
+                "\n                                                       addr_{:04x}:",
+                current_offset
+            );
         }
         print!("{:04x}: ", current_offset);
         match op {
             Ok(op) => {
                 current_offset += op.raw_data.len();
-                println!("{}", op.print_with_targets(&valid_jump_targets, current_offset));
+                println!(
+                    "{}",
+                    op.print_with_targets(&valid_jump_targets, current_offset)
+                );
             }
             Err(err) => {
                 println!("(error) {}", err);
