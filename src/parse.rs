@@ -1603,7 +1603,7 @@ pub fn parse_data<'data>(
                     (instr, vec![first_operand, second_operand])
                 }
                 0xC2 => {
-                    let constant = stream.read_16_or_32bit_constant(operand_bits)?;
+                    let constant = stream.read_16_or_32bit_constant(Bits::Bit16)?;
                     (OpCode::RetN, vec![constant])
                 }
                 0xC3 => (OpCode::RetN, vec![]),
