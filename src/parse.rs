@@ -1409,7 +1409,15 @@ pub fn parse_data<'data>(
                                 bits: operand_bits,
                             }
                         }
-                        Bits::Bit32 => return Err(ParseError::Unimplemented32Bit),
+                        Bits::Bit32 => {
+                            let address = stream.read_u32()?;
+
+                            Operand::AbsoluteRegisterSegmentedWordOrDwordAddress32 {
+                                register: SegmentRegister::Ds,
+                                address,
+                                bits: operand_bits,
+                            }
+                        }
                     };
 
                     (OpCode::Mov, vec![ax_reg, mem_offset_operand])

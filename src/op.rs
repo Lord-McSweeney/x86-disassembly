@@ -560,6 +560,11 @@ pub enum Operand {
         address: u16,
         bits: Bits,
     },
+    AbsoluteRegisterSegmentedWordOrDwordAddress32 {
+        register: SegmentRegister,
+        address: u32,
+        bits: Bits,
+    },
     Constant8 {
         value: u8,
     },
@@ -658,6 +663,18 @@ impl Operand {
                 };
 
                 format!("{} [{}:{:#06x}]", annotation, register, address)
+            }
+            Operand::AbsoluteRegisterSegmentedWordOrDwordAddress32 {
+                register,
+                address,
+                bits,
+            } => {
+                let annotation = match bits {
+                    Bits::Bit16 => "word",
+                    Bits::Bit32 => "dword",
+                };
+
+                format!("{} [{}:{:#010x}]", annotation, register, address)
             }
             Operand::Constant8 { value } => format!("{:#04x}", value),
             Operand::Constant16 { value } => format!("{:#06x}", value),
